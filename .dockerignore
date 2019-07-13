@@ -1,0 +1,9 @@
+# comment1
+.git
+Dockerfile
+README.md
+.dockerignore
+*.md
+*git*
+*docker*
+*Docker*

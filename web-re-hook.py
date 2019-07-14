@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 
+import argparse
 import re
 import yaml
 import logging
 import sys
 import json
 import validators
+import py_compile
 import os
 import asyncio
-#import aiohttp
 import jinja2
+import aiohttp
 from aiohttp import web, ClientSession
+
 
 def load_yml(file):
     with open(file, 'r') as f:
@@ -24,32 +27,6 @@ def load_yml(file):
             sys.exit(1)
 
     return(yml)
-
-def json_query_recussive(JSON, json_items):   
-    obj = JSON
-
-    try:
-        while json_items:
-            json_item = json_items.pop(0)
-            if isinstance(json_item, str) and isinstance(obj, dict):
-                obj = obj.get(json_item)
-            elif isinstance(json_item, int) and isinstance(obj, list) and \
-                    json_item < len(obj):
-                obj = obj[json_item]
-            else:
-                logging.error(f'Type not match in {json_items}. Exiting.')
-                return(None)
-    except ValueError:
-        logging.error(f'Value error in {json_items}. Exiting.')
-        return(None)
-    except TypeError:
-        logging.error(f'Type error in {json_items}. Exiting.')
-        return(None)
-    except:
-        logging.error("JSON unexpected error:", sys.exc_info()[0])
-        return(None)
-
-    return(obj)
 
 def get_json_params(json_query):
     output = []
@@ -97,46 +74,54 @@ def parse_when(when):
         logging.error(f'Cannot parse {when[shift:when_len]}. Exiting.')
         sys.exit(1)
 
-    return(output)
+    return(output[:-1])
 
-def get_x_headers(request):
-    x_headers = {}
-    headers = request.headers.keys()
-    for header in headers:
-        if header[0:2] == 'X-':
-            x_headers.update({header: request.headers.get(header)})
+def json_query_recussive(JSON, json_items):   
+    obj = JSON
 
-    return(x_headers)
+    try:
+        while json_items:
+            json_item = json_items.pop(0)
+            if isinstance(json_item, str) and isinstance(obj, dict):
+                obj = obj.get(json_item)
+            elif isinstance(json_item, int) and isinstance(obj, list) and \
+                    json_item < len(obj):
+                obj = obj[json_item]
+            else:
+                logging.error(f'Type not match in {json_items}. Exiting.')
+                return(None)
+    except ValueError:
+        logging.error(f'Value error in {json_items}. Exiting.')
+        return(None)
+    except TypeError:
+        logging.error(f'Type error in {json_items}. Exiting.')
+        return(None)
+    except:
+        logging.error("JSON unexpected error:", sys.exc_info()[0])
+        return(None)
 
-
-# void main(void)
-
-TRIES = 2
-allowed_words = ['True', 'False', '\d+', '\'[\w ]*\'',
-                 'and', 'or', 'not',
-                 'in', 'is',
-                 '>', '<', '==',
-                 '>=', '<=',
-                 ]
-allowed_words_pattern = re.compile(f'^([\(\)\s]*(?:{"|".join(allowed_words)})[\(\)\s]*?)')
-json_pattern = re.compile('^([\(\)\s]*JSON((?:\[[^\[\]]+\])+)[\(\)\s]*?)')
-json_list_pattern = re.compile('^(\[(\d+)\])')
-json_dict_pattern = re.compile('^(\[[\'\"](\w+)[\'\"]\])')
-template_path = 'templates/'
-logging.basicConfig(level=logging.INFO)
-done_deafults = True
+    return(obj)
 
 def prepare_rules(rules, routes):
     templates = {}
 
     for rule in rules:
         if not rule.get('name'):
-            logging.error(f'Missed name field in {rule}')
+            logging.error(f'Missed name field in {rule}. Exiting')
             sys.exit(1)
 
         if rule.get('when'):
-            # TODO: Exception
-            code = compile(parse_when(rule['when']), 'string', 'eval')
+            try:
+                code = compile(parse_when(rule['when']), 'string', 'eval')
+            except SyntaxError:
+                logging.error(f"Syntax error in {rule['when']}. Exiting.")
+                sys.exit(1)
+            except py_compile.PyCompileError:
+                logging.error(f"Compile error in {rule['when']}. Exiting.")
+                sys.exit(1)
+            except:
+                logging.error("Unexpected compile error in {rule['when']}:", sys.exc_info()[0])
+                sys.exit(1)
             rule.update({'when': code})
 
         if rule.get('route'):
@@ -155,8 +140,11 @@ def prepare_rules(rules, routes):
                     logging.error(f'Something wrong with {path}. Exiting.')
                     sys.exit(1)
                 with open(path, 'r') as f:
-                    #TODO: Exception
-                    j2template = jinja2.Template(f.read())
+                    try:
+                        j2template = jinja2.Template(f.read())
+                    except jinja2.TemplateError:
+                        logging.error(f"Jinja template error in {rule['name']}. Exiting.")
+                        sys.exit(1)
                     templates.update({rule['template']: j2template})
         else:
             logging.error(f'Template is not set for {rule["name"]}. Exiting.')
@@ -195,9 +183,17 @@ async def receive_handler(request):
 
     raise web.HTTPOk
 
-async def send_handler(JSON, url, template, name):
-#TODO: exceptions
-    
+def get_x_headers(request):
+    x_headers = {}
+    headers = request.headers.keys()
+    for header in headers:
+        if header[0:2] == 'X-':
+            x_headers.update({header: request.headers.get(header)})
+
+    return(x_headers)
+
+
+async def send_handler(JSON, url, template, name):   
     text = template.render(JSON = JSON)
     try:
         json_ = json.loads(text)
@@ -205,19 +201,23 @@ async def send_handler(JSON, url, template, name):
         logging.error(f'Broken JSON format in {name}')
         return()
     except:
-        logging.error("JSON Unexpected error in {name}:", sys.exc_info()[0])
+        logging.error(f"Unexpected JSON error in {name}:", sys.exc_info()[0])
         return()
 
     i = 0
     while i < TRIES:
         async with ClientSession() as session:
-            async with session.post(url, json=json_) as resp:
-                data = await resp.text()
-                if data:
-                    logging.info(f"Received: {data}")
-                if resp.status >= 200 and resp.status < 300:
-                    print(200)
-                    break
+            try:
+                async with session.post(url, json=json_) as resp:                      
+                    data = await resp.text()
+                    if resp.status >= 200 and resp.status < 300:
+                        break
+                    else:
+                        if data:
+                            logging.info(f"Rule {name} received: {data}")
+            except aiohttp.ClientError:
+                logging.error(f"HTTP client error in {name}:", sys.exc_info()[0])
+                continue
         i += 1
         await asyncio.sleep(10)
 
@@ -248,23 +248,39 @@ async def process_rules(rules, templates, JSON, x_headers):
         if rule["done"]:
             break
 
-routes = load_yml("routes.yml")
+# void main(void)
+
+TRIES = 2
+allowed_words = ['True', 'False', '\d+', '\'[\w ]*\'',
+                 'and', 'or', 'not',
+                 'in', 'is',
+                 '>', '<', '==',
+                 '>=', '<=',
+                 ]
+allowed_words_pattern = re.compile(f'^([\(\)\s]*(?:{"|".join(allowed_words)})[\(\)\s]*?)')
+json_pattern = re.compile('^([\(\)\s]*JSON((?:\[[^\[\]]+\])+)[\(\)\s]*?)')
+json_list_pattern = re.compile('^(\[(\d+)\])')
+json_dict_pattern = re.compile('^(\[[\'\"](\w+)[\'\"]\])')
+
+parser = argparse.ArgumentParser(description='Webhooks re-sender')
+parser.add_argument('--path', default="./", help='path to workdir (default: pwd)')
+parser.add_argument('--port', default=8080, help='port to listen (default: 8080)')
+parser.add_argument('--done', default=True, \
+                    help='done when rule match (default: True)')
+parse_args = vars(parser.parse_args())
+path = parse_args['path']
+port = parse_args['port']
+done_deafults = parse_args['done']
+template_path = f'{path}templates/'
+
+
+logging.basicConfig(level=logging.INFO)
+
+routes = load_yml(f"{path}routes.yml")
 check_routes(routes)
-rules = load_yml("rules.yml")
+rules = load_yml(f"{path}rules.yml")
 rules, templates = prepare_rules(rules, routes)
 
 app = web.Application()
 app.add_routes([web.post('/', receive_handler)])
-web.run_app(app)
-
-
-
-#def parse_rules(rules):
-#    for rule in rules:
-#        print(rule)
-
-#print(parse_when(rules[0]))
-#parse_rules(rules)
-
-#code = compile('True and 1', '', 'eval')
-#print(eval(code))o
+web.run_app(app, port=port)

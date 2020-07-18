@@ -21,10 +21,10 @@ def load_yml(file):
             yml = yaml.safe_load(f)
         except yaml.YAMLError:
             logging.error(f'Broken yml format in {file}. Exiting.')
-            sys.exit(1)
+            return(False)
         except:
             logging.error("Unexpected yml error:", sys.exc_info()[0])
-            sys.exit(1)
+            return(False)
 
     return(yml)
 
@@ -108,54 +108,54 @@ def prepare_rules(rules, routes):
     for rule in rules:
         if not rule.get('name'):
             logging.error(f'Missed name field in {rule}. Exiting')
-            sys.exit(1)
+            return(False, False)
 
         if rule.get('when'):
             try:
                 code = compile(parse_when(rule['when']), 'string', 'eval')
             except SyntaxError:
                 logging.error(f"Syntax error in {rule['when']}. Exiting.")
-                sys.exit(1)
+                return(False, False)
             except py_compile.PyCompileError:
                 logging.error(f"Compile error in {rule['when']}. Exiting.")
-                sys.exit(1)
+                return(False, False)
             except:
                 logging.error("Unexpected compile error in {rule['when']}:",
                               sys.exc_info()[0])
-                sys.exit(1)
+                return(False, False)
             rule.update({'when': code})
 
         if rule.get('route'):
             for route in rule['route']:
                 if route not in routes.keys():
                     logging.error(f'{route} is absent in routes.yml. Exiting.')
-                    sys.exit(1)
+                    return(False, False)
         else:
             logging.error(f'Route is not set for {rule["name"]}. Exiting.')
-            sys.exit(1)
+            return(False, False)
 
         if rule.get('template'):
             if rule['template'] not in templates.keys():
                 path = template_path + rule['template']
                 if not os.path.isfile(path) or not os.access(path, os.R_OK):
                     logging.error(f'Something wrong with {path}. Exiting.')
-                    sys.exit(1)
+                    return(False, False)
                 with open(path, 'r') as f:
                     try:
                         j2template = jinja2.Template(f.read())
                     except jinja2.TemplateError:
                         logging.error(
                             f"Jinja template error in {rule['name']}. Exiting.")
-                        sys.exit(1)
+                        return(False, False)
                     templates.update({rule['template']: j2template})
         else:
             logging.error(f'Template is not set for {rule["name"]}. Exiting.')
-            sys.exit(1)
+            return(False, False)
 
         if 'done' in rule.keys():
             if rule['done'] not in [True, False]:
                 logging.error(f'Wrong done in {rule["name"]}. Exiting.')
-                sys.exit(1)
+                return(False, False)
         else:
             rule.update({'done': done_deafults})
 
@@ -165,7 +165,7 @@ def check_routes(routes):
     for key, value in routes.items():
         if not validators.url(value):
             logging.error(f'{key, value} url validation failed. Exiting.')
-            sys.exit(1)
+            return(False)
 
 async def receive_handler(request):
     x_headers = get_x_headers(request)
@@ -285,11 +285,18 @@ template_path = f'{path}templates/'
 logging.basicConfig(level=logging.INFO)
 
 routes = load_yml(f"{path}routes.yml")
+if not routes:
+    sys.exit(1)
 if not check_routes(routes):
     sys.exit(1)
-rules = load_yml(f"{path}rules.yml")
-rules, templates = prepare_rules(rules, routes)
+rules_raw = load_yml(f"{path}rules.yml")
+if not rules:
+    sys.exit(1)
+rules, templates = prepare_rules(rules_raw, routes)
+if False in (rules, templates):
+    sys.exit(1)
 
 app = web.Application()
 app.add_routes([web.post('/', receive_handler)])
 web.run_app(app, port=port)
+

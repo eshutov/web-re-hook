@@ -48,7 +48,7 @@ def get_json_params(json_query):
 
         logging.error(f'Cannot parse {json_query}. Exiting.')
         sys.exit(1)
-    
+
     return(output)
 
 def parse_when(when):
@@ -76,7 +76,7 @@ def parse_when(when):
 
     return(output[:-1])
 
-def json_query_recussive(JSON, json_items):   
+def json_query_recussive(JSON, json_items):
     obj = JSON
 
     try:
@@ -120,7 +120,8 @@ def prepare_rules(rules, routes):
                 logging.error(f"Compile error in {rule['when']}. Exiting.")
                 sys.exit(1)
             except:
-                logging.error("Unexpected compile error in {rule['when']}:", sys.exc_info()[0])
+                logging.error("Unexpected compile error in {rule['when']}:",
+                              sys.exc_info()[0])
                 sys.exit(1)
             rule.update({'when': code})
 
@@ -143,7 +144,8 @@ def prepare_rules(rules, routes):
                     try:
                         j2template = jinja2.Template(f.read())
                     except jinja2.TemplateError:
-                        logging.error(f"Jinja template error in {rule['name']}. Exiting.")
+                        logging.error(
+                            f"Jinja template error in {rule['name']}. Exiting.")
                         sys.exit(1)
                     templates.update({rule['template']: j2template})
         else:
@@ -193,7 +195,7 @@ def get_x_headers(request):
     return(x_headers)
 
 
-async def send_handler(JSON, url, template, name):   
+async def send_handler(JSON, url, template, name):
     text = template.render(JSON = JSON)
     try:
         json_ = json.loads(text)
@@ -208,7 +210,7 @@ async def send_handler(JSON, url, template, name):
     while i < TRIES:
         async with ClientSession() as session:
             try:
-                async with session.post(url, json=json_) as resp:                      
+                async with session.post(url, json=json_) as resp:
                     data = await resp.text()
                     if resp.status >= 200 and resp.status < 300:
                         break
@@ -216,7 +218,8 @@ async def send_handler(JSON, url, template, name):
                         if data:
                             logging.info(f"Rule {name} received: {data}")
             except aiohttp.ClientError:
-                logging.error(f"HTTP client error in {name}:", sys.exc_info()[0])
+                logging.error(f"HTTP client error in {name}:",
+                              sys.exc_info()[0])
                 continue
         i += 1
         await asyncio.sleep(10)
@@ -237,13 +240,15 @@ async def process_rules(rules, templates, JSON, x_headers):
             logging.error(f"Type error in {rule['name']}. Exiting.")
             continue
         except:
-            logging.error("Unexpected error in {rule['name']}:", sys.exc_info()[0])
+            logging.error("Unexpected error in {rule['name']}:",
+                        sys.exc_info()[0])
             continue
         if not when_match:
             continue
 
         for route in rule['route']:
-            asyncio.create_task(send_handler(JSON, routes[route], templates[rule['template']], rule['name']))
+            asyncio.create_task(send_handler(JSON, routes[route],
+                        templates[rule['template']], rule['name']))
 
         if rule["done"]:
             break
@@ -257,16 +262,19 @@ allowed_words = ['True', 'False', '\d+', '\'[\w ]*\'',
                  '>', '<', '==',
                  '>=', '<=',
                  ]
-allowed_words_pattern = re.compile(f'^([\(\)\s]*(?:{"|".join(allowed_words)})[\(\)\s]*?)')
+allowed_words_pattern = re.compile(
+                        f'^([\(\)\s]*(?:{"|".join(allowed_words)})[\(\)\s]*?)')
 json_pattern = re.compile('^([\(\)\s]*JSON((?:\[[^\[\]]+\])+)[\(\)\s]*?)')
 json_list_pattern = re.compile('^(\[(\d+)\])')
 json_dict_pattern = re.compile('^(\[[\'\"](\w+)[\'\"]\])')
 
 parser = argparse.ArgumentParser(description='Webhooks re-sender')
-parser.add_argument('--path', default="./", help='path to workdir (default: pwd)')
-parser.add_argument('--port', default=8080, help='port to listen (default: 8080)')
-parser.add_argument('--done', default=True, \
-                    help='done when rule match (default: True)')
+parser.add_argument('--path', default="./",
+                    help='path to workdir (default: pwd)')
+parser.add_argument('--port', default=8080,
+                    help='port to listen (default: 8080)')
+parser.add_argument('--done', default=True,
+                    help='done when first rule match (default: True)')
 parse_args = vars(parser.parse_args())
 path = parse_args['path']
 port = parse_args['port']
@@ -277,7 +285,8 @@ template_path = f'{path}templates/'
 logging.basicConfig(level=logging.INFO)
 
 routes = load_yml(f"{path}routes.yml")
-check_routes(routes)
+if not check_routes(routes):
+    sys.exit(1)
 rules = load_yml(f"{path}rules.yml")
 rules, templates = prepare_rules(rules, routes)
 

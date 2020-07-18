@@ -20,10 +20,10 @@ def load_yml(file):
         try:
             yml = yaml.safe_load(f)
         except yaml.YAMLError:
-            logging.error(f'Broken yml format in {file}. Exiting.')
+            logging.error(f'load_yml: Broken yml format in {file}. Exiting.')
             return(False)
         except:
-            logging.error("Unexpected yml error:", sys.exc_info()[0])
+            logging.error('load_yml: Unexpected yml error:', sys.exc_info()[0])
             return(False)
 
     return(yml)
@@ -46,20 +46,20 @@ def get_json_params(json_query):
             shift += match.span(1)[1]
             continue
 
-        logging.error(f'Cannot parse {json_query}. Exiting.')
-        sys.exit(1)
+        logging.error(f'get_json_params: Cannot parse {json_query}. Exiting.')
+        return(None)
 
     return(output)
 
 def parse_when(when):
-    output = ""
+    output = []
     shift = 0
-
     when_len = len(when)
+
     while shift < when_len:
         match = re.match(allowed_words_pattern, when[shift:when_len])
         if match:
-            output += match.expand('\g<1>') + " "
+            output.append(match.expand('\g<1>'))
             shift += match.span(1)[1] + 1
             continue
 
@@ -67,14 +67,18 @@ def parse_when(when):
         if match:
             json_query = match.expand('\g<2>')
             json_params = get_json_params(json_query)
-            output += f'json_query_recussive(JSON, {json.dumps(json_params)})' + " "
+            if json_params is None:
+                return(None)
+            output.append(
+                f'json_query_recussive(JSON, {json.dumps(json_params)})')
             shift += match.span(1)[1] + 1
             continue
 
-        logging.error(f'Cannot parse {when[shift:when_len]}. Exiting.')
-        sys.exit(1)
+        logging.error(
+            f'parse_when: Cannot parse {when[shift:when_len]}. Exiting.')
+        return(None)
 
-    return(output[:-1])
+    return(" ".join(output))
 
 def json_query_recussive(JSON, json_items):
     obj = JSON
@@ -88,16 +92,20 @@ def json_query_recussive(JSON, json_items):
                     json_item < len(obj):
                 obj = obj[json_item]
             else:
-                logging.error(f'Type not match in {json_items}. Exiting.')
+                logging.debug(
+            f'json_query_recussive: Type not match in {json_items}. Exiting.')
                 return(None)
     except ValueError:
-        logging.error(f'Value error in {json_items}. Exiting.')
+        logging.error(
+            f'json_query_recussive: Value error in {json_items}. Exiting.')
         return(None)
     except TypeError:
-        logging.error(f'Type error in {json_items}. Exiting.')
+        logging.error(
+            f'json_query_recussive: Type error in {json_items}. Exiting.')
         return(None)
     except:
-        logging.error("JSON unexpected error:", sys.exc_info()[0])
+        logging.error(
+            'json_query_recussive: JSON unexpected error:', sys.exc_info()[0])
         return(None)
 
     return(obj)
@@ -107,20 +115,27 @@ def prepare_rules(rules, routes):
 
     for rule in rules:
         if not rule.get('name'):
-            logging.error(f'Missed name field in {rule}. Exiting')
+            logging.error(
+                f'prepare_rules: Missed name field in {rule}. Exiting')
             return(False, False)
 
         if rule.get('when'):
+            parsed_when = parse_when(rule['when'])
+            if parsed_when is None:
+                return(False, False)
             try:
-                code = compile(parse_when(rule['when']), 'string', 'eval')
+                code = compile((parsed_when), 'string', 'eval')
             except SyntaxError:
-                logging.error(f"Syntax error in {rule['when']}. Exiting.")
+                logging.error(
+                    f"prepare_rules: Syntax error in {rule['when']}. Exiting.")
                 return(False, False)
             except py_compile.PyCompileError:
-                logging.error(f"Compile error in {rule['when']}. Exiting.")
+                logging.error(
+                    f"prepare_rules: Compile error in {rule['when']}. Exiting.")
                 return(False, False)
             except:
-                logging.error("Unexpected compile error in {rule['when']}:",
+                logging.error(
+                "prepare_rules: Unexpected compile error in {rule['when']}:",
                               sys.exc_info()[0])
                 return(False, False)
             rule.update({'when': code})
@@ -128,33 +143,38 @@ def prepare_rules(rules, routes):
         if rule.get('route'):
             for route in rule['route']:
                 if route not in routes.keys():
-                    logging.error(f'{route} is absent in routes.yml. Exiting.')
+                    logging.error(
+                    f'prepare_rules: {route} is absent in routes.yml. Exiting.')
                     return(False, False)
         else:
-            logging.error(f'Route is not set for {rule["name"]}. Exiting.')
+            logging.error(
+                f'prepare_rules: Route is not set for {rule["name"]}. Exiting.')
             return(False, False)
 
         if rule.get('template'):
             if rule['template'] not in templates.keys():
                 path = template_path + rule['template']
                 if not os.path.isfile(path) or not os.access(path, os.R_OK):
-                    logging.error(f'Something wrong with {path}. Exiting.')
+                    logging.error(
+                        f'prepare_rules: Something wrong with {path}. Exiting.')
                     return(False, False)
                 with open(path, 'r') as f:
                     try:
                         j2template = jinja2.Template(f.read())
                     except jinja2.TemplateError:
                         logging.error(
-                            f"Jinja template error in {rule['name']}. Exiting.")
+             f"prepare_rules: Jinja template error in {rule['name']}. Exiting.")
                         return(False, False)
                     templates.update({rule['template']: j2template})
         else:
-            logging.error(f'Template is not set for {rule["name"]}. Exiting.')
+            logging.error(
+            f'prepare_rules: Template is not set for {rule["name"]}. Exiting.')
             return(False, False)
 
         if 'done' in rule.keys():
             if rule['done'] not in [True, False]:
-                logging.error(f'Wrong done in {rule["name"]}. Exiting.')
+                logging.error(
+                    f'prepare_rules: Wrong done in {rule["name"]}. Exiting.')
                 return(False, False)
         else:
             rule.update({'done': done_deafults})
@@ -169,11 +189,11 @@ def check_routes(routes):
 
 async def receive_handler(request):
     x_headers = get_x_headers(request)
-    text = await request.text()
 
+    text = await request.text()
     none = None
     try:
-        JSON = json.loads(text)
+        json_received = json.loads(text)
     except ValueError:
         logging.error(f'Broken JSON format: {x_headers}')
         raise web.HTTPOk
@@ -181,7 +201,13 @@ async def receive_handler(request):
         logging.error("JSON Unexpected error:", sys.exc_info()[0])
         raise web.HTTPOk
 
-    await process_rules(rules, templates, JSON, x_headers)
+    app_config = request.app['app_config']
+    routes = app_config['routes']
+    rules = app_config['rules']
+    templates = app_config['templates']
+
+    asyncio.create_task(process_rules(
+            routes, rules, templates, json_received, x_headers))
 
     raise web.HTTPOk
 
@@ -224,7 +250,7 @@ async def send_handler(JSON, url, template, name):
         i += 1
         await asyncio.sleep(10)
 
-async def process_rules(rules, templates, JSON, x_headers):
+async def process_rules(routes, rules, templates, JSON, x_headers):
     for rule in rules:
         if 'x-header' in rule.keys():
             for x_header in rule['x-header']:
@@ -234,14 +260,17 @@ async def process_rules(rules, templates, JSON, x_headers):
         try:
             when_match = eval(rule['when'])
         except ValueError:
-            logging.error(f"Value error in {rule['name']}. Exiting.")
+            logging.error(
+                f"process_rules: Value error in {rule['name']}. Exiting.")
             continue
         except TypeError:
-            logging.error(f"Type error in {rule['name']}. Exiting.")
+            logging.error(
+                f"process_rules: Type error in {rule['name']}. Exiting.")
             continue
         except:
-            logging.error("Unexpected error in {rule['name']}:",
-                        sys.exc_info()[0])
+            logging.error(
+                "process_rules: Unexpected error in {rule['name']}:",
+                sys.exc_info()[0])
             continue
         if not when_match:
             continue
@@ -285,18 +314,24 @@ template_path = f'{path}templates/'
 logging.basicConfig(level=logging.INFO)
 
 routes = load_yml(f"{path}routes.yml")
-if not routes:
+if routes == False:
     sys.exit(1)
-if not check_routes(routes):
+if check_routes(routes) == False:
     sys.exit(1)
 rules_raw = load_yml(f"{path}rules.yml")
-if not rules:
+if rules_raw == False:
     sys.exit(1)
 rules, templates = prepare_rules(rules_raw, routes)
 if False in (rules, templates):
     sys.exit(1)
 
+#print(routes)
+#print(rules)
+#print(templates)
+app_config = {'routes': routes, 'rules': rules, 'templates': templates}
+
 app = web.Application()
 app.add_routes([web.post('/', receive_handler)])
+app['app_config'] = app_config
 web.run_app(app, port=port)
 

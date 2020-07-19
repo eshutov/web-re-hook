@@ -110,7 +110,7 @@ def json_query_recussive(JSON, json_items):
 
     return(obj)
 
-def prepare_rules(rules, routes):
+def prepare_rules(rules, routes, template_path):
     templates = {}
 
     for rule in rules:
@@ -177,15 +177,17 @@ def prepare_rules(rules, routes):
                     f'prepare_rules: Wrong done in {rule["name"]}. Exiting.')
                 return(False, False)
         else:
-            rule.update({'done': done_deafults})
+            rule.update({'done': done})
 
     return(rules, templates)
 
 def check_routes(routes):
     for key, value in routes.items():
         if not validators.url(value):
-            logging.error(f'{key, value} url validation failed. Exiting.')
+            logging.error(
+                f'check_routes: {key, value} url validation failed. Exiting.')
             return(False)
+    return(True)
 
 async def receive_handler(request):
     x_headers = get_x_headers(request)
@@ -195,24 +197,27 @@ async def receive_handler(request):
     try:
         json_received = json.loads(text)
     except ValueError:
-        logging.error(f'Broken JSON format: {x_headers}')
+        logging.error(f'receive_handler: Broken JSON format: {x_headers}')
         raise web.HTTPOk
     except:
-        logging.error("JSON Unexpected error:", sys.exc_info()[0])
+        logging.error("receive_handler: JSON Unexpected error:",
+                     sys.exc_info()[0])
         raise web.HTTPOk
 
     app_config = request.app['app_config']
     routes = app_config['routes']
     rules = app_config['rules']
     templates = app_config['templates']
+    arguments = app_config['arguments']
 
     asyncio.create_task(process_rules(
-            routes, rules, templates, json_received, x_headers))
+            routes, rules, templates, arguments, json_received, x_headers))
 
     raise web.HTTPOk
 
 def get_x_headers(request):
     x_headers = {}
+
     headers = request.headers.keys()
     for header in headers:
         if header[0:2] == 'X-':
@@ -220,20 +225,21 @@ def get_x_headers(request):
 
     return(x_headers)
 
-
-async def send_handler(JSON, url, template, name):
-    text = template.render(JSON = JSON)
+async def send_handler(JSON, url, name, template, arguments):
+    text = template.render(JSON=JSON)
     try:
         json_ = json.loads(text)
     except ValueError:
-        logging.error(f'Broken JSON format in {name}')
-        return()
+        logging.warning(f'send_handler: Broken JSON format in {name}')
+        return(None)
     except:
-        logging.error(f"Unexpected JSON error in {name}:", sys.exc_info()[0])
-        return()
+        logging.warning(f'send_handler: Unexpected JSON error in {name}:',
+                     sys.exc_info()[0])
+        return(None)
 
     i = 0
-    while i < TRIES:
+    tries = arguments[TRIESARG]
+    while i < tries:
         async with ClientSession() as session:
             try:
                 async with session.post(url, json=json_) as resp:
@@ -250,7 +256,7 @@ async def send_handler(JSON, url, template, name):
         i += 1
         await asyncio.sleep(10)
 
-async def process_rules(routes, rules, templates, JSON, x_headers):
+async def process_rules(routes, rules, templates, arguments, JSON, x_headers):
     for rule in rules:
         if 'x-header' in rule.keys():
             for x_header in rule['x-header']:
@@ -277,14 +283,41 @@ async def process_rules(routes, rules, templates, JSON, x_headers):
 
         for route in rule['route']:
             asyncio.create_task(send_handler(JSON, routes[route],
-                        templates[rule['template']], rule['name']))
+                        rule['name'], templates[rule['template']], arguments))
 
         if rule["done"]:
             break
 
-# void main(void)
+def get_arguments():
+    output = {}
 
-TRIES = 2
+    parser = argparse.ArgumentParser(description=ARGSPARSEDESC)
+    for item in ARGSTOPARSE:
+        name = '--' + item["name"]
+        default = item["default"]
+        help_ = item["help"] + f" (default: {default})"
+        parser.add_argument(name, default=default, help=help_)
+    parsed_args = vars(parser.parse_args())
+
+    for item in ARGSTOPARSE:
+        name = item["name"]
+        default = item["default"]
+        env_value = os.environ.get(name.upper(), default)
+        arg_value = parsed_args[name]
+        value = env_value
+        if arg_value != default:
+            value = arg_value
+
+        if name == CONFDIRARG:
+            if value[-1] != '/':
+                value += '/'
+
+        output.update({name: value})
+
+    return(output)
+
+
+# CONSTS
 allowed_words = ['True', 'False', '\d+', '\'[\w ]*\'',
                  'and', 'or', 'not',
                  'in', 'is',
@@ -297,41 +330,55 @@ json_pattern = re.compile('^([\(\)\s]*JSON((?:\[[^\[\]]+\])+)[\(\)\s]*?)')
 json_list_pattern = re.compile('^(\[(\d+)\])')
 json_dict_pattern = re.compile('^(\[[\'\"](\w+)[\'\"]\])')
 
-parser = argparse.ArgumentParser(description='Webhooks re-sender')
-parser.add_argument('--path', default="./",
-                    help='path to workdir (default: pwd)')
-parser.add_argument('--port', default=8080,
-                    help='port to listen (default: 8080)')
-parser.add_argument('--done', default=True,
-                    help='done when first rule match (default: True)')
-parse_args = vars(parser.parse_args())
-path = parse_args['path']
-port = parse_args['port']
-done_deafults = parse_args['done']
-template_path = f'{path}templates/'
-
+ARGSPARSEDESC ='Webhooks re-sender'
+CONFDIRARG = 'confdir'
+PORTARG = 'port'
+TRIESARG = 'tries'
+ARGSTOPARSE = [
+    {"name": CONFDIRARG,
+     "default": "./",
+     "help": "path to confdir"},
+    {"name": PORTARG,
+     "default": 8080,
+     "help": "port to listen"},
+    {"name": "done",
+     "default": True,
+     "help": "done when first rule match"},
+    {"name": TRIESARG,
+     "default": 1,
+     "help": "max amount of send attemps"}
+    ]
 
 logging.basicConfig(level=logging.INFO)
 
-routes = load_yml(f"{path}routes.yml")
+# void main(void)
+arguments = get_arguments()
+if len(arguments) != len(ARGSTOPARSE):
+    logging.error(f"main: Args parse error. Exiting.")
+    sys.exit(1)
+
+routes = load_yml(f"{arguments[CONFDIRARG]}routes.yml")
 if routes == False:
     sys.exit(1)
+
 if check_routes(routes) == False:
     sys.exit(1)
-rules_raw = load_yml(f"{path}rules.yml")
-if rules_raw == False:
+
+rules = load_yml(f"{arguments[CONFDIRARG]}rules.yml")
+if rules == False:
     sys.exit(1)
-rules, templates = prepare_rules(rules_raw, routes)
+
+template_path = f"{arguments[CONFDIRARG]}templates/"
+rules, templates = prepare_rules(rules, routes, template_path)
 if False in (rules, templates):
     sys.exit(1)
 
-#print(routes)
-#print(rules)
-#print(templates)
-app_config = {'routes': routes, 'rules': rules, 'templates': templates}
-
 app = web.Application()
 app.add_routes([web.post('/', receive_handler)])
+app_config = {'routes': routes,
+              'rules': rules,
+              'templates': templates,
+              'arguments': arguments}
 app['app_config'] = app_config
-web.run_app(app, port=port)
+web.run_app(app, port=arguments[PORTARG])
 

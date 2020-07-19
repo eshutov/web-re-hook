@@ -110,16 +110,24 @@ def json_query_recussive(JSON, json_items):
 
     return(obj)
 
-def prepare_rules(rules, routes, template_path):
+def prepare_rules(rules, routes, arguments):
+    template_path = f"{arguments[CONFDIRARG]}templates/"
+    done = arguments[DONEARG]
     templates = {}
 
     for rule in rules:
-        if not rule.get('name'):
+        if rule.get('name') is None:
             logging.error(
-                f'prepare_rules: Missed name field in {rule}. Exiting')
+                f"prepare_rules: Missed name field in {rule}. Exiting")
             return(False, False)
 
-        if rule.get('when'):
+        if rule.get('headers') is not None and \
+                not isinstance(rule['headers'], dict):
+            logging.error(
+                f"prepare_rules: Wrong headers in \"{rule['name']}\". Exiting")
+            return(False, False)
+
+        if rule.get('when') is not None:
             parsed_when = parse_when(rule['when'])
             if parsed_when is None:
                 return(False, False)
@@ -127,11 +135,11 @@ def prepare_rules(rules, routes, template_path):
                 code = compile((parsed_when), 'string', 'eval')
             except SyntaxError:
                 logging.error(
-                    f"prepare_rules: Syntax error in {rule['when']}. Exiting.")
+                f"prepare_rules: Syntax error in \"{rule['name']}\". Exiting.")
                 return(False, False)
             except py_compile.PyCompileError:
                 logging.error(
-                    f"prepare_rules: Compile error in {rule['when']}. Exiting.")
+                f"prepare_rules: Compile error in \"{rule['name']}\". Exiting.")
                 return(False, False)
             except:
                 logging.error(
@@ -140,7 +148,7 @@ def prepare_rules(rules, routes, template_path):
                 return(False, False)
             rule.update({'when': code})
 
-        if rule.get('routes'):
+        if rule.get('routes') is not None:
             for route in rule['routes']:
                 if route not in routes.keys():
                     logging.error(
@@ -171,7 +179,7 @@ def prepare_rules(rules, routes, template_path):
             f'prepare_rules: Template is not set for {rule["name"]}. Exiting.')
             return(False, False)
 
-        if 'done' in rule.keys():
+        if rule.get('done') is not None:
             if rule['done'] not in [True, False]:
                 logging.error(
                     f'prepare_rules: Wrong done in {rule["name"]}. Exiting.')
@@ -195,7 +203,10 @@ async def receive_handler(request):
     try:
         json_received = json.loads(text)
     except ValueError:
-        logging.error(f'receive_handler: Broken JSON format: {x_headers}')
+        logging.error(f'receive_handler: ValueError: {text}')
+        raise web.HTTPOk
+    except json.decoder.JSONDecodeError:
+        logging.error(f'receive_handler: JSONDecodeError: {text}')
         raise web.HTTPOk
     except:
         logging.error("receive_handler: JSON Unexpected error:",
@@ -243,21 +254,23 @@ async def send_handler(JSON, url, name, template, arguments):
                     f"send_handler: HTTP client error in '{name}' rule:",
                     sys.exc_info()[0])
         i += 1
-        await asyncio.sleep(arguments[RETRYDELAY])
+        await asyncio.sleep(arguments[RETRYDELAYARG])
 
 async def process_rules(routes, rules, templates, arguments, JSON, headers):
     for rule in rules:
 
 # match headers
-        upper_break = False
+        upper_continue = False
         for key, value in rule.get('headers', {}).items():
-            if headers.get(key) and headers[key] == value:
+            if headers.get(key) is not None and headers[key] == value:
                 continue
             else:
                 upper_break = True
                 break
-        if upper_break:
-            break
+        if upper_continue:
+            logging.debug(f"process_rules: \"{rule['name']}\"" +
+                          " rule does not match due headers")
+            continue
 
 # match when conditions
         try:
@@ -276,11 +289,12 @@ async def process_rules(routes, rules, templates, arguments, JSON, headers):
                 sys.exc_info()[0])
             continue
         if not when_matched:
-            logging.info(f"process_rules: Not matched '{rule['name']}' rule")
+            logging.debug(f"process_rules: \"{rule['name']}\"" +
+                          " rule does not match due when")
             continue
 
-        logging.info(f"process_rules: Matched '{rule['name']}' rule")
-        for route in rule['route']:
+        logging.debug(f"process_rules: \"{rule['name']}\" rule matched")
+        for route in rule['routes']:
             asyncio.create_task(send_handler(JSON, routes[route],
                         rule['name'], templates[rule['template']], arguments))
 
@@ -332,8 +346,10 @@ json_dict_pattern = re.compile('^(\[[\'\"](\w+)[\'\"]\])')
 ARGSPARSEDESC ='Webhooks re-sender'
 CONFDIRARG = 'confdir'
 PORTARG = 'port'
-RETRYDELAY = 'delay'
+DONEARG = 'done'
+RETRYDELAYARG = 'delay'
 TRIESARG = 'tries'
+VERBOSEARG = 'verbose'
 ARGSTOPARSE = [
     {"name": CONFDIRARG,
      "default": "./",
@@ -341,24 +357,28 @@ ARGSTOPARSE = [
     {"name": PORTARG,
      "default": 8080,
      "help": "port to listen"},
-    {"name": "done",
+    {"name": DONEARG,
      "default": True,
      "help": "done when first rule match"},
-    {"name": RETRYDELAY,
+    {"name": RETRYDELAYARG,
      "default": 5,
      "help": "retry delay seconds"},
     {"name": TRIESARG,
      "default": 1,
-     "help": "max amount of send attemps"}
+     "help": "max amount of send attemps"},
+    {"name": VERBOSEARG,
+     "default": 10,
+     "help": "logging verbose"}
     ]
 
-logging.basicConfig(level=logging.INFO)
 
 # void main(void)
 arguments = get_arguments()
 if len(arguments) != len(ARGSTOPARSE):
     logging.error(f"main: Args parse error. Exiting.")
     sys.exit(1)
+
+logging.basicConfig(level=arguments[VERBOSEARG])
 
 routes = load_yml(f"{arguments[CONFDIRARG]}routes.yml")
 if routes == False:
@@ -371,8 +391,7 @@ rules = load_yml(f"{arguments[CONFDIRARG]}rules.yml")
 if rules == False:
     sys.exit(1)
 
-template_path = f"{arguments[CONFDIRARG]}templates/"
-rules, templates = prepare_rules(rules, routes, template_path)
+rules, templates = prepare_rules(rules, routes, arguments)
 if False in (rules, templates):
     sys.exit(1)
 

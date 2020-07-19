@@ -3,9 +3,10 @@
     X-Gitlab-Token: 1234qwer
     X-Gitlab-Event: Push Hook
   when: JSON['project']['name'] == 'Diaspora'
-  template: slack_push.j2
+  template: discord_commit.j2
   routes:
-    - slack_code_monkeys
+    - debug
+    - discord_webhook
   done: True
 
 - name: Gitlab tag push from John Smith to John Smith's master
@@ -15,7 +16,7 @@
   when: JSON['user_name'] == 'John Smith'
   template: discord_commit.j2
   routes:
-    - john_smiths_master
+    - debug
     - discord_webhook
   done: True
 

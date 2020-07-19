@@ -140,8 +140,8 @@ def prepare_rules(rules, routes, template_path):
                 return(False, False)
             rule.update({'when': code})
 
-        if rule.get('route'):
-            for route in rule['route']:
+        if rule.get('routes'):
+            for route in rule['routes']:
                 if route not in routes.keys():
                     logging.error(
                     f'prepare_rules: {route} is absent in routes.yml. Exiting.')
@@ -190,8 +190,6 @@ def check_routes(routes):
     return(True)
 
 async def receive_handler(request):
-    x_headers = get_x_headers(request)
-
     text = await request.text()
     none = None
     try:
@@ -209,24 +207,15 @@ async def receive_handler(request):
     rules = app_config['rules']
     templates = app_config['templates']
     arguments = app_config['arguments']
+    headers = request.headers
 
     asyncio.create_task(process_rules(
-            routes, rules, templates, arguments, json_received, x_headers))
+            routes, rules, templates, arguments, json_received, headers))
 
     raise web.HTTPOk
 
-def get_x_headers(request):
-    x_headers = {}
-
-    headers = request.headers.keys()
-    for header in headers:
-        if header[0:2] == 'X-':
-            x_headers.update({header: request.headers.get(header)})
-
-    return(x_headers)
-
 async def send_handler(JSON, url, name, template, arguments):
-    text = template.render(JSON=JSON)
+    text = template.render(JSON = JSON)
     try:
         json_ = json.loads(text)
     except ValueError:
@@ -245,26 +234,34 @@ async def send_handler(JSON, url, name, template, arguments):
                 async with session.post(url, json=json_) as resp:
                     data = await resp.text()
                     if resp.status >= 200 and resp.status < 300:
-                        break
+                        return(None)
                     else:
-                        if data:
-                            logging.info(f"Rule {name} received: {data}")
+                        logging.debug(
+                            f"send_handler: rule '{name}' received: {data}")
             except aiohttp.ClientError:
-                logging.error(f"HTTP client error in {name}:",
-                              sys.exc_info()[0])
-                continue
+                logging.error(
+                    f"send_handler: HTTP client error in '{name}' rule:",
+                    sys.exc_info()[0])
         i += 1
-        await asyncio.sleep(10)
+        await asyncio.sleep(arguments[RETRYDELAY])
 
-async def process_rules(routes, rules, templates, arguments, JSON, x_headers):
+async def process_rules(routes, rules, templates, arguments, JSON, headers):
     for rule in rules:
-        if 'x-header' in rule.keys():
-            for x_header in rule['x-header']:
-                if x_header not in x_headers:
-                    continue
 
+# match headers
+        upper_break = False
+        for key, value in rule.get('headers', {}).items():
+            if headers.get(key) and headers[key] == value:
+                continue
+            else:
+                upper_break = True
+                break
+        if upper_break:
+            break
+
+# match when conditions
         try:
-            when_match = eval(rule['when'])
+            when_matched = eval(rule['when'])
         except ValueError:
             logging.error(
                 f"process_rules: Value error in {rule['name']}. Exiting.")
@@ -278,9 +275,11 @@ async def process_rules(routes, rules, templates, arguments, JSON, x_headers):
                 "process_rules: Unexpected error in {rule['name']}:",
                 sys.exc_info()[0])
             continue
-        if not when_match:
+        if not when_matched:
+            logging.info(f"process_rules: Not matched '{rule['name']}' rule")
             continue
 
+        logging.info(f"process_rules: Matched '{rule['name']}' rule")
         for route in rule['route']:
             asyncio.create_task(send_handler(JSON, routes[route],
                         rule['name'], templates[rule['template']], arguments))
@@ -333,6 +332,7 @@ json_dict_pattern = re.compile('^(\[[\'\"](\w+)[\'\"]\])')
 ARGSPARSEDESC ='Webhooks re-sender'
 CONFDIRARG = 'confdir'
 PORTARG = 'port'
+RETRYDELAY = 'delay'
 TRIESARG = 'tries'
 ARGSTOPARSE = [
     {"name": CONFDIRARG,
@@ -344,6 +344,9 @@ ARGSTOPARSE = [
     {"name": "done",
      "default": True,
      "help": "done when first rule match"},
+    {"name": RETRYDELAY,
+     "default": 5,
+     "help": "retry delay seconds"},
     {"name": TRIESARG,
      "default": 1,
      "help": "max amount of send attemps"}

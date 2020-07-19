@@ -1,19 +1,21 @@
 - name: Gitlab push event Diaspora to slack code monkeys
-  x-header:
+  headers:
     X-Gitlab-Token: 1234qwer
     X-Gitlab-Event: Push Hook
   when: JSON['project']['name'] == 'Diaspora'
-  route:
-    - slack_code_monkeys
   template: slack_push.j2
+  routes:
+    - slack_code_monkeys
   done: True
 
 - name: Gitlab tag push from John Smith to John Smith's master
-  x-header:
+  headers:
     X-Gitlab-Token: 1234qwer
     X-Gitlab-Event: Tag Push Hook
   when: JSON['user_name'] == 'John Smith'
-  route:
+  template: discord_commit.j2
+  routes:
     - john_smiths_master
-  template: slack_tag_push.j2
+    - discord_webhook
   done: True
+

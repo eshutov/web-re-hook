@@ -1,8 +1,8 @@
-# comment1
 .git
 Dockerfile
 README.md
 .dockerignore
+.python-version
 *.md
 *git*
 *docker*

@@ -179,13 +179,13 @@ def prepare_rules(rules, routes, arguments):
             f'prepare_rules: Template is not set for {rule["name"]}. Exiting.')
             return(False, False)
 
-        if rule.get('done') is not None:
+        if rule.get('done') is None:
+            rule.update({'done': done})
+        else:
             if rule['done'] not in [True, False]:
                 logging.error(
                     f'prepare_rules: Wrong done in {rule["name"]}. Exiting.')
                 return(False, False)
-        else:
-            rule.update({'done': done})
 
     return(rules, templates)
 
@@ -214,14 +214,8 @@ async def receive_handler(request):
         raise web.HTTPOk
 
     app_config = request.app['app_config']
-    routes = app_config['routes']
-    rules = app_config['rules']
-    templates = app_config['templates']
-    arguments = app_config['arguments']
     headers = request.headers
-
-    asyncio.create_task(process_rules(
-            routes, rules, templates, arguments, json_received, headers))
+    asyncio.create_task(process_rules(app_config, json_received, headers))
 
     raise web.HTTPOk
 
@@ -256,16 +250,20 @@ async def send_handler(JSON, url, name, template, arguments):
         i += 1
         await asyncio.sleep(arguments[RETRYDELAYARG])
 
-async def process_rules(routes, rules, templates, arguments, JSON, headers):
-    for rule in rules:
+async def process_rules(app_config, JSON, headers):
+    routes = app_config['routes']
+    rules = app_config['rules']
+    templates = app_config['templates']
+    arguments = app_config['arguments']
 
+    for rule in rules:
 # match headers
         upper_continue = False
         for key, value in rule.get('headers', {}).items():
             if headers.get(key) is not None and headers[key] == value:
                 continue
             else:
-                upper_break = True
+                upper_continue = True
                 break
         if upper_continue:
             logging.debug(f"process_rules: \"{rule['name']}\"" +
@@ -305,6 +303,7 @@ def get_arguments():
     output = {}
 
     parser = argparse.ArgumentParser(description=ARGSPARSEDESC)
+
     for item in ARGSTOPARSE:
         name = '--' + item["name"]
         default = item["default"]
@@ -346,7 +345,7 @@ json_dict_pattern = re.compile('^(\[[\'\"](\w+)[\'\"]\])')
 ARGSPARSEDESC ='Webhooks re-sender'
 CONFDIRARG = 'confdir'
 PORTARG = 'port'
-DONEARG = 'done'
+DONEARG = 'autodone'
 RETRYDELAYARG = 'delay'
 TRIESARG = 'tries'
 VERBOSEARG = 'verbose'
@@ -359,7 +358,7 @@ ARGSTOPARSE = [
      "help": "port to listen"},
     {"name": DONEARG,
      "default": True,
-     "help": "done when first rule match"},
+     "help": "done when any rule match"},
     {"name": RETRYDELAYARG,
      "default": 5,
      "help": "retry delay seconds"},
@@ -372,35 +371,37 @@ ARGSTOPARSE = [
     ]
 
 
-# void main(void)
-arguments = get_arguments()
-if len(arguments) != len(ARGSTOPARSE):
-    logging.error(f"main: Args parse error. Exiting.")
-    sys.exit(1)
+def main():
+    arguments = get_arguments()
+    if len(arguments) != len(ARGSTOPARSE):
+        logging.error(f"main: Args parse error. Exiting.")
+        sys.exit(1)
 
-logging.basicConfig(level=arguments[VERBOSEARG])
+    logging.basicConfig(level=arguments[VERBOSEARG])
 
-routes = load_yml(f"{arguments[CONFDIRARG]}routes.yml")
-if routes == False:
-    sys.exit(1)
+    routes = load_yml(f"{arguments[CONFDIRARG]}routes.yml")
+    if routes == False:
+        sys.exit(1)
 
-if check_routes(routes) == False:
-    sys.exit(1)
+    if check_routes(routes) == False:
+        sys.exit(1)
 
-rules = load_yml(f"{arguments[CONFDIRARG]}rules.yml")
-if rules == False:
-    sys.exit(1)
+    rules = load_yml(f"{arguments[CONFDIRARG]}rules.yml")
+    if rules == False:
+        sys.exit(1)
 
-rules, templates = prepare_rules(rules, routes, arguments)
-if False in (rules, templates):
-    sys.exit(1)
+    rules, templates = prepare_rules(rules, routes, arguments)
+    if False in (rules, templates):
+        sys.exit(1)
 
-app = web.Application()
-app.add_routes([web.post('/', receive_handler)])
-app_config = {'routes': routes,
-              'rules': rules,
-              'templates': templates,
-              'arguments': arguments}
-app['app_config'] = app_config
-web.run_app(app, port=arguments[PORTARG])
+    app = web.Application()
+    app.add_routes([web.post('/', receive_handler)])
+    app_config = {'routes': routes,
+                  'rules': rules,
+                  'templates': templates,
+                  'arguments': arguments}
+    app['app_config'] = app_config
+    web.run_app(app, port=arguments[PORTARG])
 
+if __name__ == '__main__':
+    main()

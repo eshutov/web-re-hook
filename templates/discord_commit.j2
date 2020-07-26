@@ -1,0 +1,35 @@
+{
+  "username": "Gitlab",
+  "avatar_url": "https://icon-icons.com/icons2/2415/PNG/128/gitlab_original_logo_icon_146503.png",
+  "embeds": [
+    {
+      "author": {
+        "name": "{{ JSON['user_name'] }}",
+        "url": "https://gitlab.com/{{ JSON['user_username'] }}",
+        "icon_url": "{{ JSON['user_avatar'] }}"
+      },
+      "title": "Pushed commit{{ 's' if (JSON['commits'] | length > 1) else '' }} to {{ JSON['project']['name'] }}:",
+      "url": "{{ JSON['project']['web_url'] }}",
+      "color": 3394611,
+      "fields": [
+{%- for commit in JSON['commits'] %}
+        {
+          "name": "Hash",
+          "value": "[{{ commit["id"][0:7] }}]({{ commit["url"] }})",
+          "inline": true
+        },
+        {
+          "name": "Title",
+          "value": "{{ commit["title"] }}",
+          "inline": true
+        },
+        {
+          "name": "Message",
+          "value": "{{ (commit["message"].split('\n') | reject("==", "") | join('\\n'))[0:200] }}",
+          "inline": true
+        }{{ "," if loop.index < JSON['commits'] | length }}
+{%- endfor %}
+      ]
+    }
+  ]
+}

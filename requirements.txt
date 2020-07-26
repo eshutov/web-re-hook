@@ -2,3 +2,4 @@ PyYAML
 validators
 jinja2
 aiohttp
+pytest

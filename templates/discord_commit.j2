@@ -12,16 +12,23 @@
       "url": "{{ JSON['project']['web_url'] }}",
       "color": 3394611,
       "fields": [
+{%- for commit in JSON['commits'] %}
         {
-          "name": "Text",
-          "value": "More text",
+          "name": "Hash",
+          "value": "[{{ commit["id"][0:7] }}]({{ commit["url"] }})",
           "inline": true
         },
         {
-          "name": "Even more text",
-          "value": "Yup",
+          "name": "Title",
+          "value": "{{ commit["title"] }}",
           "inline": true
-        }
+        },
+        {
+          "name": "Message",
+          "value": "{{ (commit["message"].split('\n') | reject("==", "") | join('\\n'))[0:200] }}",
+          "inline": true
+        }{{ "," if loop.index < JSON['commits'] | length }}
+{%- endfor %}
       ]
     }
   ]

@@ -75,12 +75,35 @@ def prepare_testdata():
 
     return(testdata)
 
+@pytest.fixture(scope="function", params=[
+    ([], [0], None),
+    ([0], [], None),
+    ([1], ["0"], None),
+    ([1], [0], 1),
+    ([1, [11]], [1, 0], 11),
+    ([1, [11]], [1, 1], None),
+    ({'a': 'aa', 'b': 'bb'}, [0], None),
+    ({'a': 'aa', 'b': 'bb'}, ['b'], 'bb'),
+    ({'a': 'aa', 'b': {'bb': 'bbb'}}, ['b', 'bb'], 'bbb'),
+    ({'a': [0, 1]}, ['a', 1], 1),
+    ([{'a': 'aa'}], [0, 'a'], 'aa')
+    ])
+def params_json_query_recussive(request):
+    return request.param
+
+def test_json_query_recussive(params_json_query_recussive):
+    (input_json, input_query, expected_output) = \
+        params_json_query_recussive
+    result = json_query_recussive(input_json, input_query)
+    assert result == expected_output
+
 @pytest.fixture(scope="function", params=prepare_testdata())
 def params_test_params(request):
     return request.param
 
 def test_params(params_test_params):
-    input_data, expected_output = params_test_params["input"], params_test_params["output"]
+    input_data, expected_output = \
+        params_test_params["input"], params_test_params["output"]
     assert input_data == expected_output
 
 

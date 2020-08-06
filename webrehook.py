@@ -83,6 +83,9 @@ def parse_when(when):
 def json_query_recussive(JSON, json_items):
     obj = JSON
 
+    if len(json_items) == 0:
+        return(None)
+
     try:
         while json_items:
             json_item = json_items.pop(0)

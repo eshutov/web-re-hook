@@ -333,7 +333,8 @@ def get_arguments():
 
 
 # CONSTS
-allowed_words = ['True', 'False', '\d+', '\'[\w ]*\'',
+allowed_words = ['True', 'False', 'None',
+                 '\d+', '\'[\w ]*\w\'', '\"[\w ]*\w\"',
                  'and', 'or', 'not',
                  'in', 'is',
                  '>', '<', '==',

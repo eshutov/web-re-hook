@@ -46,12 +46,16 @@ def test_get_json_params(params_get_json_params):
     assert result == expected_output
 
 @pytest.fixture(scope="function", params=[
-#   ('''JSON["user_name"] == "John Smith"''',
-#       """json_query_recussive(JSON, ["user_name"]) == 'John Smith'"""),
+    ('''JSON["user_name"] == "John Smith"''',
+        '''json_query_recussive(JSON, ["user_name"]) == "John Smith"'''),
     ("""JSON['user_name'] == 'John Smith'""",
         """json_query_recussive(JSON, ["user_name"]) == 'John Smith'"""),
-    ("""JSON['project']['name'] == 'Diaspora'""",
-        """json_query_recussive(JSON, ["project", "name"]) == 'Diaspora'""")
+    ("""JSON['commits'][0]['author']['name'] == 'Jordi Mallach'""",
+        """json_query_recussive(JSON, ["commits", 0, "author", "name"]) == 'Jordi Mallach'"""),
+    ("""JSON['commits'][0] is not None""",
+        """json_query_recussive(JSON, ["commits", 0]) is not None"""),
+    ("""JSON['commits'][0] is not None and JSON['commits'][0]['author']['name'] == 'Jordi Mallach'""",
+        """json_query_recussive(JSON, ["commits", 0]) is not None and json_query_recussive(JSON, ["commits", 0, "author", "name"]) == 'Jordi Mallach'""")
     ])
 def params_parse_when(request):
     return request.param

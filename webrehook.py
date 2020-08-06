@@ -47,7 +47,7 @@ def get_json_params(json_query):
             continue
 
         logging.error(f'get_json_params: Cannot parse {json_query}. Exiting.')
-        return(None)
+        return(False)
 
     return(output)
 
@@ -67,7 +67,7 @@ def parse_when(when):
         if match:
             json_query = match.expand('\g<2>')
             json_params = get_json_params(json_query)
-            if json_params is None:
+            if json_params == False:
                 return(None)
             output.append(
                 f'json_query_recussive(JSON, {json.dumps(json_params)})')
@@ -334,7 +334,7 @@ allowed_words = ['True', 'False', '\d+', '\'[\w ]*\'',
                  'and', 'or', 'not',
                  'in', 'is',
                  '>', '<', '==',
-                 '>=', '<=',
+                 '>=', '<=', '!='
                  ]
 allowed_words_pattern = re.compile(
                         f'^([\(\)\s]*(?:{"|".join(allowed_words)})[\(\)\s]*?)')
@@ -404,4 +404,8 @@ def main():
     web.run_app(app, port=arguments[PORTARG])
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        pass
+

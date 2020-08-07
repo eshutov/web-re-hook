@@ -65,20 +65,6 @@ def test_parse_when(params_parse_when):
     result = parse_when(input_data)
     assert result == expected_output
 
-def prepare_testdata():
-    testdata = []
-
-    yaml_input = load_yml('rules.yml')
-    yaml_output = load_yml('rules.yml')
-    if yaml_input == False or yaml_output == False or \
-            len(yaml_input) != len(yaml_output):
-        return([{"input": False, "output": True}])
-
-    for input_, output in zip(yaml_input, yaml_output):
-        testdata.append({"input": input_, "output": output})
-
-    return(testdata)
-
 @pytest.fixture(scope="function", params=[
     ([], [0], None),
     ([0], [], None),
@@ -100,6 +86,20 @@ def test_json_query_recussive(params_json_query_recussive):
         params_json_query_recussive
     result = json_query_recussive(input_json, input_query)
     assert result == expected_output
+
+def prepare_testdata():
+    testdata = []
+
+    yaml_input = load_yml('rules.yml')
+    yaml_output = load_yml('rules.yml')
+    if yaml_input == False or yaml_output == False or \
+            len(yaml_input) != len(yaml_output):
+        return([{"input": False, "output": True}])
+
+    for input_, output in zip(yaml_input, yaml_output):
+        testdata.append({"input": input_, "output": output})
+
+    return(testdata)
 
 @pytest.fixture(scope="function", params=prepare_testdata())
 def params_test_params(request):

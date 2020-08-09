@@ -3,3 +3,4 @@ validators
 jinja2
 aiohttp
 pytest
+sly

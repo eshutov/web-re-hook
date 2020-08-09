@@ -55,14 +55,16 @@ def test_get_json_params(params_get_json_params):
     ("""JSON['commits'][0] is not None""",
         """json_query_recussive(JSON, ["commits", 0]) is not None"""),
     ("""JSON['commits'][0] is not None and JSON['commits'][0]['author']['name'] == 'Jordi Mallach'""",
-        """json_query_recussive(JSON, ["commits", 0]) is not None and json_query_recussive(JSON, ["commits", 0, "author", "name"]) == 'Jordi Mallach'""")
+        """json_query_recussive(JSON, ["commits", 0]) is not None and json_query_recussive(JSON, ["commits", 0, "author", "name"]) == 'Jordi Mallach'"""),
+    ("""((JSON['commits'][0] is not None) and (JSON['commits'][0]['author']['name'] == 'Jordi Mallach'))""",
+        """( ( json_query_recussive(JSON, ["commits", 0]) is not None ) ) and ( ( json_query_recussive(JSON, ["commits", 0, "author", "name"]) == 'Jordi Mallach' ) )""")
     ])
 def params_parse_when(request):
     return request.param
 
 def test_parse_when(params_parse_when):
     (input_data, expected_output) = params_parse_when
-    result = parse_when(input_data)
+    result = " ".join(parse_when(input_data))
     assert result == expected_output
 
 @pytest.fixture(scope="function", params=[

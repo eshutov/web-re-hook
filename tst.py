@@ -70,32 +70,31 @@ class MyParser(Parser):
     def expr(self, p):
         return p[0]
 
-    @_("json_query_recursive '[' string ']'")
+    @_("json_query_recursive '[' expr ']'")
     def json_query_recursive(self, p):
-        self.json_query.append(p.string)
-        return f"json_query_recursive{self.json_query}"
-
-    @_('\'"\' SUBSTR \'"\'')
-    def string(self, p):
-        return f"{p.SUBSTR}"
-
-    @_("\"'\" SUBSTR \"'\"")
-    def string(self, p):
-        return f"{p.SUBSTR}"
-
-    @_("json_query_recursive '[' NUMBER ']'")
-    def json_query_recursive(self, p):
-        self.json_query.append(p.NUMBER)
-        return f"json_query_recursive{self.json_query}"
+        self.json_query.append(p.expr)
+        return f"json_query_recursive[{', '.join(map(str, self.json_query))}]"
 
     @_('JSON')
     def json_query_recursive(self, p):
         self.json_query = []
         return 'json_query_recursive'
 
+    @_('string')
+    def expr(self, p):
+        return p.string
+
+    @_('\'"\' SUBSTR \'"\'')
+    def string(self, p):
+        return f"'{p.SUBSTR}'"
+
+    @_("\"'\" SUBSTR \"'\"")
+    def string(self, p):
+        return f"'{p.SUBSTR}'"
+
     @_('NUMBER')
     def expr(self, p):
-        return int(p.NUMBER)
+        return p.NUMBER
 
     @_('BINOPEXC')
     def binop(self, p):
@@ -106,17 +105,13 @@ class MyParser(Parser):
         return p.BINOP
 
 if __name__ == '__main__':
-    whentxt = "(JSON['outer'] == 'Outer' and (JSON['inner'] == 'Inner'))"
-    #whentxt = "JSON['outer'] == 'Outer' and (JSON['inner'] == 'Inner')"
-    #and (JSON['inner'] == 'Inner')"
-    #whentxt = "JSON['outer'] == 'Outer'"
-    #whentxt = '(JSON[0]["abc"][\'qwe\'] == 123) not in 1'
+    whentxt = "(JSON['outer'][0][\"qwe\"]== 'Outer' and (JSON['inner'] == 'Inner'))"
 
     lexer = MyLexer()
     parser = MyParser()
 #   for tok in lexer.tokenize(whentxt):
 #       print(tok)
 
-    print("#########")
+    print("##########################################")
     result = parser.parse(lexer.tokenize(whentxt))
     print(result)

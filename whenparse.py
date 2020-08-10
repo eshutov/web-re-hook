@@ -1,19 +1,8 @@
 #!/usr/bin/env python3
 
-import argparse
-import re
-import yaml
-import logging
-import sys
-import json
-import py_compile
-import os
-import asyncio
-import jinja2
 from sly import Lexer, Parser
 
-
-class MyLexer(Lexer):
+class WhenLexer(Lexer):
     tokens = { SUBSTR, JSON, NUMBER, BINOP, BINOPEXC, NOT, IN, RESWORD }
     literals = { '(', ')', '[', ']', '\'', '"' }
     ignore = ' \t'
@@ -43,9 +32,9 @@ class MyLexer(Lexer):
         print('Line %d: Bad character %r' % (self.lineno, t.value[0]))
         self.index += 1
 
-class MyParser(Parser):
-    debugfile = 'parser.out'
-    tokens = MyLexer.tokens
+class WhenParser(Parser):
+#   debugfile = 'parser.out'
+    tokens = WhenLexer.tokens
     precedence = (
        ('left', SUBSTR, JSON, NUMBER, BINOP, BINOPEXC, NOT, IN, RESWORD),
     )
@@ -112,13 +101,15 @@ class MyParser(Parser):
         return p.NUMBER
 
 if __name__ == '__main__':
-    whentxt = "(JSON['outer'][0][\"qwe\"] == 'Outer' and (JSON['inner'] == 'Inner'))"
+#   whentxt = "(JSON['outer'][0][\"qwe\"] == 'Outer' and (JSON['inner'] == 'Inner'))"
+#   whentxt = "((JSON['commits'][0] is not None) and (JSON['commits'][0]['author']['name'] == 'Jordi Mallach'))"
+    whentxt = "(JSON['commits'][0] is not None) and JSON['commits'][0]['author']['name'] == 'JordiMallach'"
 
-    lexer = MyLexer()
-    parser = MyParser()
+    lexer = WhenLexer()
+    parser = WhenParser()
 #   for tok in lexer.tokenize(whentxt):
 #       print(tok)
 
-    print("##########################################")
+#   print("##########################################")
     result = parser.parse(lexer.tokenize(whentxt))
     print(result)

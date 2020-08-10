@@ -13,7 +13,7 @@ import asyncio
 import jinja2
 import aiohttp
 from aiohttp import web, ClientSession
-
+from whenparse import WhenLexer, WhenParser
 
 def load_yml(file):
     with open(file, 'r') as f:
@@ -28,77 +28,99 @@ def load_yml(file):
 
     return(yml)
 
-def get_json_params(json_query):
-    output = []
-    shift = 0
-    query_len = len(json_query)
+#   def get_json_params(json_query):
+#       output = []
+#       shift = 0
+#       query_len = len(json_query)
 
-    while shift < query_len:
-        match = re.match(json_dict_pattern, json_query[shift:query_len])
-        if match:
-            output.append(match.group(2))
-            shift += match.span(1)[1]
-            continue
+#       while shift < query_len:
+#           match = re.match(json_dict_pattern, json_query[shift:query_len])
+#           if match:
+#               output.append(match.group(2))
+#               shift += match.span(1)[1]
+#               continue
 
-        match = re.match(json_list_pattern, json_query[shift:query_len])
-        if match:
-            output.append(int(match.group(2)))
-            shift += match.span(1)[1]
-            continue
+#           match = re.match(json_list_pattern, json_query[shift:query_len])
+#           if match:
+#               output.append(int(match.group(2)))
+#               shift += match.span(1)[1]
+#               continue
 
-        logging.error(f'get_json_params: Cannot parse {json_query}. Exiting.')
-        return(False)
+#           logging.error(f'get_json_params: Cannot parse {json_query}. Exiting.')
+#           return(False)
 
-    return(output)
+#       return(output)
+
+#   def parse_when(when):
+#       output = []
+#       shift = 0
+#       when_len = len(when)
+
+#   #   print(when_len)
+#   #   print(when)
+#       print("### Going deep")
+
+#       while shift < when_len:
+#           print(f'Output: {output}')
+#           print(f'Current str: {when[shift:when_len]}')
+#           if match := re.match(when_bracers_pattern, when[shift:when_len]):
+#               bracers_begin = match.span(1)[0] + shift
+#               bracers_end = match.span(1)[1] + shift
+#               print(bracers_begin, bracers_end, when_len)
+#               output.append('(')
+#               print(when[bracers_begin:bracers_end])
+#               output += parse_when(when[bracers_begin:bracers_end])
+#               output.append(')')
+#               shift += bracers_end + 1
+#               continue
+#   #           print(match.group(1))
+#   #           print(match.span(1))
+
+#           if match := re.match(allowed_words_pattern, when[shift:when_len]):
+#               print(f'Worlds: {match.group(1)}')
+#               output.append(match.group(1))
+#               shift += match.span(1)[1] + 1
+#               continue
+
+#           if match := re.match(json_pattern, when[shift:when_len]):
+#               print(f'Json: {match.group(2)}')
+#               json_query = match.group(2)
+#               json_params = get_json_params(json_query)
+#               if json_params == False:
+#                   return(None)
+#               output.append(
+#                   f'json_query_recussive(JSON, {json.dumps(json_params)})')
+#               shift += match.span(1)[1] + 1
+#               continue
+
+#           logging.error(
+#               f'parse_when: Cannot parse {when[shift:when_len]}. Exiting.')
+#           return(None)
+
+#       print("### Going up")
+#       return(output)
 
 def parse_when(when):
-    output = []
-    shift = 0
-    when_len = len(when)
+    print(when)
+    lexer = WhenLexer()
+    for tok in lexer.tokenize(when):
+        print(tok)
+    parser = WhenParser()
 
-#   print(when_len)
-#   print(when)
-    print("### Going deep")
-
-    while shift < when_len:
-        print(f'Output: {output}')
-        print(f'Current str: {when[shift:when_len]}')
-        if match := re.match(when_bracers_pattern, when[shift:when_len]):
-            bracers_begin = match.span(1)[0] + shift
-            bracers_end = match.span(1)[1] + shift
-            print(bracers_begin, bracers_end, when_len)
-            output.append('(')
-            print(when[bracers_begin:bracers_end])
-            output += parse_when(when[bracers_begin:bracers_end])
-            output.append(')')
-            shift += bracers_end + 1
-            continue
-#           print(match.group(1))
-#           print(match.span(1))
-
-        if match := re.match(allowed_words_pattern, when[shift:when_len]):
-            print(f'Worlds: {match.group(1)}')
-            output.append(match.group(1))
-            shift += match.span(1)[1] + 1
-            continue
-
-        if match := re.match(json_pattern, when[shift:when_len]):
-            print(f'Json: {match.group(2)}')
-            json_query = match.group(2)
-            json_params = get_json_params(json_query)
-            if json_params == False:
-                return(None)
-            output.append(
-                f'json_query_recussive(JSON, {json.dumps(json_params)})')
-            shift += match.span(1)[1] + 1
-            continue
-
+    try:
+        parsed_when = parser.parse(lexer.tokenize(when))
+        return()
+    except sly.yacc.YaccError:
         logging.error(
-            f'parse_when: Cannot parse {when[shift:when_len]}. Exiting.')
+            f'parse_when: Unable to build grammar with {when}. Exiting.')
         return(None)
+    except:
+        logging.error(
+            'parse_when: Parse unexpected error:', sys.exc_info()[0])
+        return(None)
+    logging.info(f'parse_when: {parsed_when}')
 
-    print("### Going up")
-    return(output)
+    return(parsed_when)
 
 def json_query_recussive(JSON, json_items):
     obj = JSON

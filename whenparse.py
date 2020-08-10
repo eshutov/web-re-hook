@@ -3,21 +3,21 @@
 from sly import Lexer, Parser
 
 class WhenLexer(Lexer):
-    tokens = { SUBSTR, JSON, NUMBER, BINOP, BINOPEXC, NOT, IN, RESWORD }
+    tokens = { NAME, STRING, JSON, NUMBER, BINOP, BINOPEXC, NOT, IN, RESWORD }
     literals = { '(', ')', '[', ']', '\'', '"' }
     ignore = ' \t'
     ignore_comment = r'\#.*'
     BINOP  = r'\+|-|\*|/|==|<=|<|>=|>|!='
-    SUBSTR = r'[a-zA-Z_][a-zA-Z0-9_]*'
-    SUBSTR['JSON'] = JSON
-    SUBSTR['True'] = RESWORD
-    SUBSTR['False'] = RESWORD
-    SUBSTR['None'] = RESWORD
-    SUBSTR['and'] = BINOPEXC
-    SUBSTR['or'] = BINOPEXC
-    SUBSTR['is'] = BINOPEXC
-    SUBSTR['in'] = IN
-    SUBSTR['not'] = NOT
+    NAME = r'[a-zA-Z_][a-zA-Z0-9_]*'
+    NAME['JSON'] = JSON
+    NAME['True'] = RESWORD
+    NAME['False'] = RESWORD
+    NAME['None'] = RESWORD
+    NAME['and'] = BINOPEXC
+    NAME['or'] = BINOPEXC
+    NAME['is'] = BINOPEXC
+    NAME['in'] = IN
+    NAME['not'] = NOT
 
     @_(r'\d+')
     def NUMBER(self, t):
@@ -28,6 +28,12 @@ class WhenLexer(Lexer):
     def ignore_newline(self, t):
         self.lineno += t.value.count('\n')
 
+    @_(r'"(?:[a-zA-Z0-9_ ]*)"|\'(?:[a-zA-Z0-9_ ]*)\'')
+    def STRING(self, t):
+        if t.value[0] == '"':
+            t.value == f"'{t.value[1, -1]}'"
+        return t
+
     def error(self, t):
         print('Line %d: Bad character %r' % (self.lineno, t.value[0]))
         self.index += 1
@@ -36,7 +42,7 @@ class WhenParser(Parser):
 #   debugfile = 'parser.out'
     tokens = WhenLexer.tokens
     precedence = (
-       ('left', SUBSTR, JSON, NUMBER, BINOP, BINOPEXC, NOT, IN, RESWORD),
+       ('left', NAME, STRING, JSON, NUMBER, BINOP, BINOPEXC, NOT, IN, RESWORD),
     )
 
     def __init__(self):
@@ -80,30 +86,24 @@ class WhenParser(Parser):
         self.json_query = []
         return 'json_query_recursive'
 
-    @_('string')
+    @_('STRING')
     def expr(self, p):
-        return p.string
+        return p.STRING
 
     @_('RESWORD')
     def expr(self, p):
         return p.RESWORD
 
-    @_('\'"\' SUBSTR \'"\'')
-    def string(self, p):
-        return f"'{p.SUBSTR}'"
-
-    @_("\"'\" SUBSTR \"'\"")
-    def string(self, p):
-        return f"'{p.SUBSTR}'"
-
     @_('NUMBER')
     def expr(self, p):
         return p.NUMBER
 
+    @_('NAME')
+    def expr(self, p):
+        return p.NAME
+
 if __name__ == '__main__':
-#   whentxt = "(JSON['outer'][0][\"qwe\"] == 'Outer' and (JSON['inner'] == 'Inner'))"
-#   whentxt = "((JSON['commits'][0] is not None) and (JSON['commits'][0]['author']['name'] == 'Jordi Mallach'))"
-    whentxt = "(JSON['commits'][0] is not None) and JSON['commits'][0]['author']['name'] == 'JordiMallach'"
+    whentxt = "((JSON['commits'][0] is not None) and (JSON['commits'][0]['author']['name'] == 'Jordi Mallach'))"
 
     lexer = WhenLexer()
     parser = WhenParser()

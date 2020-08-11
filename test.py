@@ -19,16 +19,28 @@ def test_check_routes(param_check_routes):
     assert result == expected_output
 
 @pytest.fixture(scope="function", params=[
+# using '"' as str border
     ('JSON["user_name"] == "John Smith"',
         "json_query_recursive(JSON, ['user_name']) == 'John Smith'"),
-    ("JSON['user_name'] == 'John Smith'",
-        "json_query_recursive(JSON, ['user_name']) == 'John Smith'"),
-    ("(   JSON[  'user_name' ]    =='John Smith' )  ",
+# excess and missed spaces
+    (" (   JSON[  'user_name' ]    =='John Smith' )  ",
         "(json_query_recursive(JSON, ['user_name']) == 'John Smith')"),
+# extra-long query with almost whole syntax
     ("((JSON['commits'][0] is not None) and (JSON['commits'][0]['author']['name'] == 'Jordi Mallach')) or (False in JSON['false'] and True not in JSON['false'])",
         "((json_query_recursive(JSON, ['commits', 0]) is not None) and (json_query_recursive(JSON, ['commits', 0, 'author', 'name']) == 'Jordi Mallach')) or (False in json_query_recursive(JSON, ['false']) and True not in json_query_recursive(JSON, ['false']))"),
-    ("JSON[['user_name'] == 'John Smith'",
-        None),
+# broken queries
+    ("JSON[['user_name'] == 'John Smith'", None),
+    ("JSON['user_name']] == 'John Smith'", None),
+    ("JSON[''user_name'] == 'John Smith'", None),
+    ("JSON[''user_name']' == 'John Smith'", None),
+    ("JSON['user_name'][] == 'John Smith'", None),
+    ("JSON['user_name']() == 'John Smith'", None),
+    ("(JSON['user_name'] == 'John Smith'", None),
+    ("JSON['user_name']) == 'John Smith'", None),
+    ("JSON['user_name'] (==) 'John Smith'", None),
+    ("JSON['user_name'] '==' 'John Smith'", None),
+    ("JSON['user_name'] == 'John()Smith'", None),
+    ("(JSON['user_name'] == 'John)Smith'", None),
     ])
 def params_parse_when(request):
     return request.param
@@ -78,6 +90,7 @@ def prepare_testdata():
 def params_test_params(request):
     return request.param
 
+@pytest.mark.skip(reason="File rules parser reserved for future use")
 def test_params(params_test_params):
     input_data, expected_output = \
         params_test_params["input"], params_test_params["output"]

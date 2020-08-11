@@ -12,8 +12,11 @@ import os
 import asyncio
 import jinja2
 import aiohttp
+import sly
 from aiohttp import web, ClientSession
-
+from whenparse import WhenLexer, WhenParser
+from sly.yacc import GrammarError
+from sly.lex import LexError
 
 def load_yml(file):
     with open(file, 'r') as f:
@@ -28,59 +31,33 @@ def load_yml(file):
 
     return(yml)
 
-def get_json_params(json_query):
-    output = []
-    shift = 0
-    query_len = len(json_query)
-
-    while shift < query_len:
-        match = re.match(json_dict_pattern, json_query[shift:query_len])
-        if match:
-            output.append(match.expand('\g<2>'))
-            shift += match.span(1)[1]
-            continue
-
-        match = re.match(json_list_pattern, json_query[shift:query_len])
-        if match:
-            output.append(int(match.expand('\g<2>')))
-            shift += match.span(1)[1]
-            continue
-
-        logging.error(f'get_json_params: Cannot parse {json_query}. Exiting.')
-        return(False)
-
-    return(output)
-
 def parse_when(when):
-    output = []
-    shift = 0
-    when_len = len(when)
-
-    while shift < when_len:
-        match = re.match(allowed_words_pattern, when[shift:when_len])
-        if match:
-            output.append(match.expand('\g<1>'))
-            shift += match.span(1)[1] + 1
-            continue
-
-        match = re.match(json_pattern, when[shift:when_len])
-        if match:
-            json_query = match.expand('\g<2>')
-            json_params = get_json_params(json_query)
-            if json_params == False:
-                return(None)
-            output.append(
-                f'json_query_recussive(JSON, {json.dumps(json_params)})')
-            shift += match.span(1)[1] + 1
-            continue
-
+    lexer = WhenLexer()
+    try:
+        tokens = lexer.tokenize(when)
+    except LexError:
         logging.error(
-            f'parse_when: Cannot parse {when[shift:when_len]}. Exiting.')
+            f'parse_when: Unable to lex {when}. Exiting.')
+        return(None)
+    except:
+        logging.error(
+            'parse_when: Lex unexpected error:', sys.exc_info()[0])
         return(None)
 
-    return(" ".join(output))
+    parser = WhenParser()
+    try:
+        result = parser.parse(tokens)
+    except GrammarError:
+        logging.error(
+            f'parse_when: Unable to parse {when}. Exiting.')
+        return(None)
+    except:
+        logging.error(
+            'parse_when: Parse unexpected error:', sys.exc_info()[0])
+        return(None)
+    return(result)
 
-def json_query_recussive(JSON, json_items):
+def json_query_recursive(JSON, json_items):
     obj = JSON
 
     if len(json_items) == 0:
@@ -333,18 +310,6 @@ def get_arguments():
 
 
 # CONSTS
-allowed_words = ['True', 'False', '\d+', '\'[\w ]*\'',
-                 'and', 'or', 'not',
-                 'in', 'is',
-                 '>', '<', '==',
-                 '>=', '<=', '!='
-                 ]
-allowed_words_pattern = re.compile(
-                        f'^([\(\)\s]*(?:{"|".join(allowed_words)})[\(\)\s]*?)')
-json_pattern = re.compile('^([\(\)\s]*JSON((?:\[[^\[\]]+\])+)[\(\)\s]*?)')
-json_list_pattern = re.compile('^(\[(\d+)\])')
-json_dict_pattern = re.compile('^(\[[\'\"](\w+)[\'\"]\])')
-
 ARGSPARSEDESC ='Webhooks re-sender'
 CONFDIRARG = 'confdir'
 PORTARG = 'port'
@@ -372,7 +337,6 @@ ARGSTOPARSE = [
      "default": 10,
      "help": "logging verbose"}
     ]
-
 
 def main():
     arguments = get_arguments()

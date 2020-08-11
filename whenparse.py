@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from sly import Lexer, Parser
+from sly.yacc import GrammarError
 
 class WhenLexer(Lexer):
     tokens = { NAME, STRING, JSON, NUMBER, BINOP, BINOPEXC, NOT, IN, RESWORD }
@@ -28,10 +29,10 @@ class WhenLexer(Lexer):
     def ignore_newline(self, t):
         self.lineno += t.value.count('\n')
 
-    @_(r'"(?:[a-zA-Z0-9_ ]*)"|\'(?:[a-zA-Z0-9_ ]*)\'')
+    @_(r'(?:"[a-zA-Z0-9_ ]+")|(?:\'[a-zA-Z0-9_ ]+\')')
     def STRING(self, t):
         if t.value[0] == '"':
-            t.value == f"'{t.value[1, -1]}'"
+            t.value = f"'{t.value[1:-1]}'"
         return t
 
     def error(self, t):
@@ -47,6 +48,16 @@ class WhenParser(Parser):
 
     def __init__(self):
         json_query = []
+
+    def error(self, token):
+        if token:
+            lineno = getattr(token, 'lineno', 0)
+            if lineno:
+                raise GrammarError(f'sly: Syntax error at line {lineno}, token={token.type}')
+            else:
+                raise GrammarError(f'sly: Syntax error, token={token.type}')
+        else:
+            raise GrammarError('sly: Parse error in input. EOF')
 
     @_('"(" expr ")"')
     def expr(self, p):
@@ -79,7 +90,7 @@ class WhenParser(Parser):
     @_("json_query_recursive '[' expr ']'")
     def json_query_recursive(self, p):
         self.json_query.append(p.expr)
-        return f"json_query_recursive[{', '.join(map(str, self.json_query))}]"
+        return f"json_query_recursive(JSON, [{', '.join(map(str, self.json_query))}])"
 
     @_('JSON')
     def json_query_recursive(self, p):
@@ -107,9 +118,10 @@ if __name__ == '__main__':
 
     lexer = WhenLexer()
     parser = WhenParser()
-#   for tok in lexer.tokenize(whentxt):
-#       print(tok)
+    for tok in lexer.tokenize(whentxt):
+        print(tok)
 
-#   print("##########################################")
+    print("##########################################")
     result = parser.parse(lexer.tokenize(whentxt))
     print(result)
+

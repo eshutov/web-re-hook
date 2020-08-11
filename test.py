@@ -19,52 +19,23 @@ def test_check_routes(param_check_routes):
     assert result == expected_output
 
 @pytest.fixture(scope="function", params=[
-    ('["test"]', ["test"]),
-    ('[\'test\']', ["test"]),
-    ('["test"][0]', ["test", 0]),
-    ('["test"]["0"]', ["test", "0"]),
-    ('["test1"][0]["test2"]', ["test1", 0, "test2"]),
-    ('["test1"][0]["test2"]["0"]', ["test1", 0, "test2", "0"]),
-    ('["test]', False),
-    ('[test]', False),
-    ('["test"]["test]', False),
-    ('[0_]', False),
-    ('["test"][0_]', False),
-    ('[["test"]', False),
-    ('["test"]]', False),
-    ('[["test"][0]', False),
-    ('[[0]["test"]', False),
-    ('["test"]][0]', False),
-    ('["test"][0]]', False)
-    ])
-def params_get_json_params(request):
-    return request.param
-
-def test_get_json_params(params_get_json_params):
-    (input_data, expected_output) = params_get_json_params
-    result = get_json_params(input_data)
-    assert result == expected_output
-
-@pytest.fixture(scope="function", params=[
-    ('''JSON["user_name"] == "John Smith"''',
-        '''json_query_recussive(JSON, ["user_name"]) == "John Smith"'''),
-    ("""JSON['user_name'] == 'John Smith'""",
-        """json_query_recussive(JSON, ["user_name"]) == 'John Smith'"""),
-    ("""JSON['commits'][0]['author']['name'] == 'Jordi Mallach'""",
-        """json_query_recussive(JSON, ["commits", 0, "author", "name"]) == 'Jordi Mallach'"""),
-    ("""JSON['commits'][0] is not None""",
-        """json_query_recussive(JSON, ["commits", 0]) is not None"""),
-    ("""JSON['commits'][0] is not None and JSON['commits'][0]['author']['name'] == 'Jordi Mallach'""",
-        """json_query_recussive(JSON, ["commits", 0]) is not None and json_query_recussive(JSON, ["commits", 0, "author", "name"]) == 'Jordi Mallach'"""),
-    ("""((JSON['commits'][0] is not None) and (JSON['commits'][0]['author']['name'] == 'Jordi Mallach'))""",
-        """( ( json_query_recussive(JSON, ["commits", 0]) is not None ) ) and ( ( json_query_recussive(JSON, ["commits", 0, "author", "name"]) == 'Jordi Mallach' ) )""")
+    ('JSON["user_name"] == "John Smith"',
+        "json_query_recursive(JSON, ['user_name']) == 'John Smith'"),
+    ("JSON['user_name'] == 'John Smith'",
+        "json_query_recursive(JSON, ['user_name']) == 'John Smith'"),
+    ("(   JSON[  'user_name' ]    =='John Smith' )  ",
+        "(json_query_recursive(JSON, ['user_name']) == 'John Smith')"),
+    ("((JSON['commits'][0] is not None) and (JSON['commits'][0]['author']['name'] == 'Jordi Mallach')) or (False in JSON['false'] and True not in JSON['false'])",
+        "((json_query_recursive(JSON, ['commits', 0]) is not None) and (json_query_recursive(JSON, ['commits', 0, 'author', 'name']) == 'Jordi Mallach')) or (False in json_query_recursive(JSON, ['false']) and True not in json_query_recursive(JSON, ['false']))"),
+    ("JSON[['user_name'] == 'John Smith'",
+        None),
     ])
 def params_parse_when(request):
     return request.param
 
 def test_parse_when(params_parse_when):
     (input_data, expected_output) = params_parse_when
-    result = " ".join(parse_when(input_data))
+    result = parse_when(input_data)
     assert result == expected_output
 
 @pytest.fixture(scope="function", params=[
@@ -80,13 +51,13 @@ def test_parse_when(params_parse_when):
     ({'a': [0, 1]}, ['a', 1], 1),
     ([{'a': 'aa'}], [0, 'a'], 'aa')
     ])
-def params_json_query_recussive(request):
+def params_json_query_recursive(request):
     return request.param
 
-def test_json_query_recussive(params_json_query_recussive):
+def test_json_query_recursive(params_json_query_recursive):
     (input_json, input_query, expected_output) = \
-        params_json_query_recussive
-    result = json_query_recussive(input_json, input_query)
+        params_json_query_recursive
+    result = json_query_recursive(input_json, input_query)
     assert result == expected_output
 
 def prepare_testdata():
@@ -111,6 +82,4 @@ def test_params(params_test_params):
     input_data, expected_output = \
         params_test_params["input"], params_test_params["output"]
     assert input_data == expected_output
-
-
 

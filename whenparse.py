@@ -2,6 +2,8 @@
 
 from sly import Lexer, Parser
 from sly.yacc import GrammarError
+from sly.lex import LexError
+import logging
 
 class WhenLexer(Lexer):
     tokens = { NAME, STRING, JSON, NUMBER, BINOP, BINOPEXC, NOT, IN, RESWORD }
@@ -36,12 +38,16 @@ class WhenLexer(Lexer):
         return t
 
     def error(self, t):
-        print('Line %d: Bad character %r' % (self.lineno, t.value[0]))
-        self.index += 1
+        logging.error('Line %d: Bad character %r' % (self.lineno, t.value[0]))
+        raise LexError(
+            'Line %d: Bad character %r' % (self.lineno, t.value[0]),
+            self.text, t.index)
 
 class WhenParser(Parser):
 #   debugfile = 'parser.out'
     tokens = WhenLexer.tokens
+# precedance does not make sence here: since we do not do calcultaions,
+# but just checking syntax, it is here to rm shift/reduce error only
     precedence = (
        ('left', NAME, STRING, JSON, NUMBER, BINOP, BINOPEXC, NOT, IN, RESWORD),
     )
@@ -53,11 +59,15 @@ class WhenParser(Parser):
         if token:
             lineno = getattr(token, 'lineno', 0)
             if lineno:
-                raise GrammarError(f'sly: Syntax error at line {lineno}, token={token.type}')
+                logging.error(
+                    f'sly: Syntax error at line {lineno}, token={token.type}')
+                raise GrammarError
             else:
-                raise GrammarError(f'sly: Syntax error, token={token.type}')
-        else:
-            raise GrammarError('sly: Parse error in input. EOF')
+                logging.error(f'sly: Syntax error, token={token.type}')
+                raise GrammarError
+#       else:
+#           logging.error('sly: Parse error in input. EOF')
+#           raise GrammarError
 
     @_('"(" expr ")"')
     def expr(self, p):
@@ -113,15 +123,36 @@ class WhenParser(Parser):
     def expr(self, p):
         return p.NAME
 
-if __name__ == '__main__':
-    whentxt = "((JSON['commits'][0] is not None) and (JSON['commits'][0]['author']['name'] == 'Jordi Mallach'))"
-
+def main(txt):
     lexer = WhenLexer()
-    parser = WhenParser()
-    for tok in lexer.tokenize(whentxt):
-        print(tok)
+    try:
+        tokens = lexer.tokenize(txt)
+    except LexError:
+        logging.error(
+            f'parse_when: Unable to lex {txt}. Exiting.')
+        return(None)
+    except:
+        logging.error(
+            'parse_when: Lex unexpected error:', sys.exc_info()[0])
+        return(None)
 
-    print("##########################################")
-    result = parser.parse(lexer.tokenize(whentxt))
-    print(result)
+# Very weird these 2 lines below break parser when active
+#   for token in tokens:
+#       print(token)
+
+    parser = WhenParser()
+    try:
+        result = parser.parse(tokens)
+    except GrammarError:
+        logging.error(
+            f'parse_when: Unable to parse {txt}. Exiting.')
+        return(None)
+    except:
+        logging.error(
+            'parse_when: Parse unexpected error:', sys.exc_info()[0])
+        return(None)
+    return(result)
+
+if __name__ == '__main__':
+    print(main("((JSON['commits'][0] is not None) and (JSON['commits'][0]['author']['name'] == 'Jordi Mallach'))"))
 

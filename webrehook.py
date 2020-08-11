@@ -15,6 +15,8 @@ import aiohttp
 import sly
 from aiohttp import web, ClientSession
 from whenparse import WhenLexer, WhenParser
+from sly.yacc import GrammarError
+from sly.lex import LexError
 
 def load_yml(file):
     with open(file, 'r') as f:
@@ -31,20 +33,29 @@ def load_yml(file):
 
 def parse_when(when):
     lexer = WhenLexer()
-    parser = WhenParser()
-
     try:
-        parsed_when = parser.parse(lexer.tokenize(when))
-    except sly.yacc.YaccError:
+        tokens = lexer.tokenize(when)
+    except LexError:
         logging.error(
-            f'parse_when: Unable to build grammar with {when}. Exiting.')
+            f'parse_when: Unable to lex {when}. Exiting.')
+        return(None)
+    except:
+        logging.error(
+            'parse_when: Lex unexpected error:', sys.exc_info()[0])
+        return(None)
+
+    parser = WhenParser()
+    try:
+        result = parser.parse(tokens)
+    except GrammarError:
+        logging.error(
+            f'parse_when: Unable to parse {when}. Exiting.')
         return(None)
     except:
         logging.error(
             'parse_when: Parse unexpected error:', sys.exc_info()[0])
         return(None)
-
-    return(parsed_when)
+    return(result)
 
 def json_query_recursive(JSON, json_items):
     obj = JSON
@@ -299,22 +310,6 @@ def get_arguments():
 
 
 # CONSTS
-allowed_words = ['True', 'False', 'None',
-                 '\d+', '\'[\w ]*\w\'', '\"[\w ]*\w\"',
-                 'and', 'or', 'not',
-                 'in', 'is',
-                 '>', '<', '==',
-                 '>=', '<=', '!='
-                 ]
-allowed_words_pattern = re.compile(
-                f'^[\s]*({"|".join(allowed_words)})[\s]*?')
-json_pattern = re.compile('^([\s]*JSON((?:\[[^\[\]]+\])+)[\s]*?)')
-json_list_pattern = re.compile('^(\[(\d+)\])')
-json_dict_pattern = re.compile('^(\[[\'\"](\w+)[\'\"]\])')
-#when_bracers_pattern = re.compile('^[^\(]*\((.*)\)[^\)]*')
-when_bracers_pattern = re.compile('^\s*\((.*)\)')
-
-
 ARGSPARSEDESC ='Webhooks re-sender'
 CONFDIRARG = 'confdir'
 PORTARG = 'port'

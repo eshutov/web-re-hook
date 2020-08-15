@@ -1,0 +1,44 @@
+- name: All except never with single rule
+  number: 1
+  query:
+    nothing: nothing
+  received:
+    - response without templating
+  mapping:
+    always:
+      - 1
+    filter1:
+      - 1
+    filter2:
+      - 1
+    filter3:
+      - 1
+
+- name: All except never with 4 rules
+  number: 2
+  query:
+    nothing: nothing
+  received:
+    - response without templating
+  mapping:
+    always:
+      - 1
+    filter1:
+      - 1
+    filter2:
+      - 1
+    filter3:
+      - 1
+
+- name: Always and filter1 by filtering with done
+  number: 3
+  query:
+    nothing: nothing
+  received:
+    - response without templating
+  mapping:
+    always:
+      - 1
+    filter1:
+      - 1
+

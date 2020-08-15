@@ -1,0 +1,7 @@
+---
+always: http://localhost:8080/always
+filter1: http://localhost:8080/filter1
+filter2: http://localhost:8080/filter2
+filter3: http://localhost:8080/filter3
+never: http://localhost:8080/never
+

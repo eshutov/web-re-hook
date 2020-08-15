@@ -1,0 +1,93 @@
+#always : http://localhost:8080/always
+#filter1: http://localhost:8080/filter1
+#filter2: http://localhost:8080/filter2
+#filter3: http://localhost:8080/filter3
+#never: http://localhost:8080/never
+
+- name: All except never with single rule
+  headers:
+    TEST_NUMBER: "1"
+  when: True
+  template: without_template.j2
+  routes:
+    - always
+    - filter1
+    - filter2
+    - filter3
+
+###
+- name: All except never with 4 rules 1
+  headers:
+    TEST_NUMBER: "2"
+  when: True
+  template: without_template.j2
+  routes:
+    - always
+
+- name: All except never with 4 rules 2
+  headers:
+    TEST_NUMBER: "2"
+  when: True
+  template: without_template.j2
+  routes:
+    - filter1
+
+- name: All except never with 4 rules 3
+  headers:
+    TEST_NUMBER: "2"
+  when: True
+  template: without_template.j2
+  routes:
+    - filter2
+
+- name: All except never with 4 rules 4
+  headers:
+    TEST_NUMBER: "2"
+  when: True
+  template: without_template.j2
+  routes:
+    - filter3
+
+###
+- name: Always and filter1 by filtering with done 1
+  headers:
+    TEST_NUMBER: "3"
+  when: True
+  template: without_template.j2
+  routes:
+    - always
+
+- name: Always and filter1 by filtering with done 2
+  headers:
+    TEST_NUMBER: "3"
+  when: True
+  template: without_template.j2
+  routes:
+    - filter1
+  done: True
+
+- name: Always and filter1 by filtering with done 3
+  headers:
+    TEST_NUMBER: "3"
+  when: True
+  template: without_template.j2
+  routes:
+    - filter2
+
+- name: Always and filter1 by filtering with done 4
+  headers:
+    TEST_NUMBER: "3"
+  when: True
+  template: without_template.j2
+  routes:
+    - filter3
+
+- name: Always and filter1 by filtering with done 5
+  headers:
+    TEST_NUMBER: "3"
+  when: True
+  template: without_template.j2
+  routes:
+    - never
+
+

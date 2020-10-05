@@ -25,37 +25,6 @@ def load_yml(file):
 
     return(yml)
 
-async def send_handler(JSON, url, name, template, arguments):
-    text = template.render(JSON = JSON)
-    try:
-        json_ = json.loads(text)
-    except ValueError:
-        logging.warning(f'send_handler: Broken JSON format in {name}')
-        return(None)
-    except:
-        logging.warning(f'send_handler: Unexpected JSON error in {name}:',
-                     sys.exc_info()[0])
-        return(None)
-
-    i = 0
-    tries = arguments[TRIESARG]
-    while i < tries:
-        async with ClientSession() as session:
-            try:
-                async with session.post(url, json=json_) as resp:
-                    data = await resp.text()
-                    if resp.status >= 200 and resp.status < 300:
-                        return(None)
-                    else:
-                        logging.debug(
-                            f"send_handler: rule '{name}' received: {data}")
-            except aiohttp.ClientError:
-                logging.error(
-                    f"send_handler: HTTP client error in '{name}' rule:",
-                    sys.exc_info()[0])
-        i += 1
-        await asyncio.sleep(arguments[RETRYDELAYARG])
-
 class WRHRunner():
     def __init__(self):
         self.running = False
@@ -67,9 +36,9 @@ class WRHRunner():
         if self.proc is not None:
             return(False)
         self.proc = await asyncio.create_subprocess_shell(
-                            "python3 webrehook.py",
-                            stdout=asyncio.subprocess.PIPE,
-                            stderr=asyncio.subprocess.PIPE)
+            "python3 webrehook.py --confdir testdata/integration/ --autodone False",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE)
         self.running = True
         asyncio.create_task(self.waiter())
         return(True)
@@ -107,17 +76,16 @@ async def do_exit(wrh_runner=None, web_server_runner=None):
 class WebServerRunner():
     def __init__(self, port=8081):
         self.port = port
+        self.received = {}
 
     async def runner(self):
         self.app = web.Application()
         self.app.add_routes([
-            web.post('/{name}', self.receive_handler)])
-        app_config = {'routes': '222'}
-#       self.app['app_config'] = app_config
+            web.post('/{path}', self.receive_handler)])
 
-        self.runner_ = web.AppRunner(self.app)
-        await self.runner_.setup()
-        self.site = web.TCPSite(self.runner_, 'localhost', self.port)
+        self.apprunner = web.AppRunner(self.app)
+        await self.apprunner.setup()
+        self.site = web.TCPSite(self.apprunner, 'localhost', self.port)
         try:
             await self.site.start()
         except OSError:
@@ -128,17 +96,16 @@ class WebServerRunner():
     @classmethod
     async def run(cls, port=8081):
         obj = cls(port)
-        if result := await obj.runner():
+        if await obj.runner():
             return obj
         return(False)
 
     async def shutdown(self):
-        await self.runner_.cleanup()
+        await self.apprunner.cleanup()
 
     async def receive_handler(self, request):
         text = await request.text()
         none = None
-#       print(request.match_info['name'])
         try:
             json_received = json.loads(text)
         except ValueError:
@@ -152,43 +119,114 @@ class WebServerRunner():
                          sys.exc_info()[0])
             raise web.HTTPOk
 
-#       app_config = request.app['app_config']
-        headers = request.headers
-#       asyncio.create_task(process_rules(app_config, json_received, headers))
+        path = request.match_info['path']
+        if list_ := self.received.get(path):
+            list_.append(json_received)
+        else:
+            list_ = [json_received]
+        self.received.update({path: [json_received]})
 
         raise web.HTTPOk
 
+    def get_received(self):
+        return(self.received)
+
+    def reset(self):
+        self.received = {}
+
+async def send_(test):
+    async with ClientSession() as session:
+        try:
+            async with session.post(
+                    f'http://localhost:8080', json=test['data'],
+                    headers=test['headers']) as resp:
+                if resp.status != 200:
+                    logging.error(f"main: response code is not 200")
+                    return(False)
+        except aiohttp.ClientError:
+            logging.error(
+                f"main: ClientError exception with {test['name']}:",
+                sys.exc_info()[0])
+            return(False)
+    return(True)
+
 async def main():
-    logging.basicConfig(level=logging.WARNING)
+    logging.basicConfig(level=logging.INFO)
+
+    testdata = load_yml('testdata/integration/testdata.yml')
+    if not testdata:
+        logging.error("main: testdata loading error")
+        sys.exit(1)
+
+    for test in testdata:
+        for key, value in test["mapping"].items():
+            if max(value) >= len(test["received"]):
+                logging.error(
+                    f"main: Test {test['name']} in {key} path out of index")
+                sys.exit(1)
 
     wrh_runner = await WRHRunner().run()
     if wrh_runner == False:
-        logging.error("Cannot start child process.")
+        logging.error("main: Cannot start child process.")
         await do_exit(wrh_runner)
         sys.exit(1)
 
     web_server_runner = await WebServerRunner.run()
     if web_server_runner == False:
-        logging.error("Cannot start web server.")
+        logging.error("main: Cannot start web server.")
         await do_exit(wrh_runner, web_server_runner)
         sys.exit(1)
 
 # Give child script time to run python or/and die with runtime errors
-    await asyncio.sleep(2)
+    await asyncio.sleep(1)
     if not wrh_runner.running:
-        logging.error("Child script error:")
+        logging.error("Child script error")
         logging.error(f"stdout: {wrh_runner.stdout}")
         logging.error(f"stderr: {wrh_runner.stderr}")
         await do_exit(wrh_runner, web_server_runner)
         sys.exit(1)
 
-    await asyncio.sleep(60)
-    await do_exit(wrh_runner, web_server_runner)
+# Main test cycle
+    for test in testdata:
+        logging.info(f"Tesing: {test['name']}")
+        test_failed = False
+        web_server_runner.reset()
+        await send_(test)
 
+# Give child script time to resend hooks and us to receive them
+        await asyncio.sleep(1)
+        received = web_server_runner.get_received()
+        print('##############')
+        print(received)
+        print('##############')
+        for path, mappings in test["mapping"].items():
+            logging.info(f"Checking: {path}")
+            received_expected = []
+            for index in mappings:
+                received_expected.append(test["received"][index])
+
+            received_actually = received.get(path)
+            if received_actually is None:
+                logging.info(
+                    f"Checking: data expected but is not reveived to {path}")
+                test_failed = True
+
+            print(received_expected)
+            print(received_actually)
+
+
+        if test_failed:
+            logging.info(f"FAILED: {test['name']}")
+        else:
+            logging.info(f"FAILED: {test['name']}")
+
+
+
+    await asyncio.sleep(600)
+    await do_exit(wrh_runner, web_server_runner)
 
 if __name__ == '__main__':
     try:
-#       app = run_server()
         asyncio.run(main())
     except KeyboardInterrupt:
         pass

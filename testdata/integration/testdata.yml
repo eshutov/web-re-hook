@@ -1,44 +1,48 @@
 - name: All except never with single rule
-  number: 1
-  query:
+  headers:
+    TEST_NUMBER: "1"
+  data:
     nothing: nothing
   received:
-    - response without templating
+    - response: without templating
   mapping:
     always:
-      - 1
+      - 0
     filter1:
-      - 1
+      - 0
     filter2:
-      - 1
+      - 0
     filter3:
-      - 1
+      - 0
 
 - name: All except never with 4 rules
-  number: 2
-  query:
+  headers:
+    TEST_NUMBER: "2"
+  data:
     nothing: nothing
   received:
-    - response without templating
+    - response: without templating
   mapping:
     always:
-      - 1
+      - 0
     filter1:
-      - 1
+      - 0
     filter2:
-      - 1
+      - 0
     filter3:
-      - 1
+      - 0
 
 - name: Always and filter1 by filtering with done
-  number: 3
-  query:
+  headers:
+    TEST_NUMBER: "3"
+  data:
     nothing: nothing
   received:
-    - response without templating
+    - response: without templating
   mapping:
     always:
-      - 1
+      - 0
     filter1:
-      - 1
+      - 0
+
 

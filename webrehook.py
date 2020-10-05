@@ -108,7 +108,7 @@ def prepare_rules(rules, routes, arguments):
             return(False, False)
 
         if rule.get('when') is not None:
-            parsed_when = parse_when(rule['when'])
+            parsed_when = parse_when(str(rule['when']))
             if parsed_when is None:
                 return(False, False)
             try:
@@ -225,8 +225,13 @@ async def send_handler(JSON, url, name, template, arguments):
                             f"send_handler: rule '{name}' received: {data}")
             except aiohttp.ClientError:
                 logging.error(
-                    f"send_handler: HTTP client error in '{name}' rule:",
-                    sys.exc_info()[0])
+                    f"send_handler: ClientError in '{name}'")
+            except aiohttp.client_exceptions.ClientConnectorError:
+                logging.error(
+                    f"send_handler: ClientConnectorError in '{name}'")
+            except:
+                logging.error("send_handler: HTTP unexpected error:",
+                             sys.exc_info()[0])
         i += 1
         await asyncio.sleep(arguments[RETRYDELAYARG])
 
@@ -303,6 +308,13 @@ def get_arguments():
         if name == CONFDIRARG:
             if value[-1] != '/':
                 value += '/'
+        elif name == DONEARG and not isinstance(value, bool):
+            if re.match(REFALSE, value):
+                value = False
+            elif re.match(RETRUE, value):
+                value = True
+            else:
+               return({})
 
         output.update({name: value})
 
@@ -337,6 +349,8 @@ ARGSTOPARSE = [
      "default": 10,
      "help": "logging verbose"}
     ]
+RETRUE = re.compile('^(?:True|true|Yes|yes)$')
+REFALSE = re.compile('^(?:False|false|No|no)$')
 
 def main():
     arguments = get_arguments()

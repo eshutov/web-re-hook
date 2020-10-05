@@ -7,6 +7,7 @@ import logging
 import sys
 import json
 import os
+from collections import Counter
 import asyncio
 import aiohttp
 from aiohttp import web, ClientSession
@@ -153,12 +154,12 @@ async def send_(test):
 async def main():
     logging.basicConfig(level=logging.INFO)
 
-    testdata = load_yml('testdata/integration/testdata.yml')
-    if not testdata:
+    tests = load_yml('testdata/integration/testdata.yml')
+    if not tests:
         logging.error("main: testdata loading error")
         sys.exit(1)
 
-    for test in testdata:
+    for test in tests:
         for key, value in test["mapping"].items():
             if max(value) >= len(test["received"]):
                 logging.error(
@@ -187,40 +188,56 @@ async def main():
         sys.exit(1)
 
 # Main test cycle
-    for test in testdata:
-        logging.info(f"Tesing: {test['name']}")
+    for test in tests:
+        print("################################")
         test_failed = False
+        testname = test['name']
+        logging.info(f"Tesing: {testname}")
         web_server_runner.reset()
         await send_(test)
 
+        received_expected = {}
+        mapping = test["mapping"]
+        for path, indexes in mapping.items():
+            logging.info(f"Checking: {path}")
+            received_expected_path = []
+            for index in indexes:
+                received_expected_path.append(test["received"][index])
+            received_expected.update({path: received_expected_path})
 # Give child script time to resend hooks and us to receive them
         await asyncio.sleep(1)
-        received = web_server_runner.get_received()
-        print('##############')
-        print(received)
-        print('##############')
-        for path, mappings in test["mapping"].items():
-            logging.info(f"Checking: {path}")
-            received_expected = []
-            for index in mappings:
-                received_expected.append(test["received"][index])
+        received_actually = web_server_runner.get_received()
+# We have both expected and actually received dicts here.
+# Comparison of those dicts (key by key (path) comparing values
+# (list of received jsons) using collections.Counter) begins below.
+        pathes = list(set().union(*([mapping.keys(),
+                                    received_actually.keys()])))
+        for path in pathes:
+            expected_hashable = list(map(
+                            json.dumps, received_expected.get(path, [])))
+            actually_hashable = list(map(
+                            json.dumps, received_actually.get(path, [])))
+            expected_counter = Counter(expected_hashable)
+            actually_counter = Counter(actually_hashable)
 
-            received_actually = received.get(path)
-            if received_actually is None:
-                logging.info(
-                    f"Checking: data expected but is not reveived to {path}")
-                test_failed = True
+            if expected_counter == actually_counter:
+                continue
 
-            print(received_expected)
-            print(received_actually)
-
+            test_failed = True
+            logging.info(f'Path failed: "{testname}" /{path}')
+            excess_data = list(actually_counter - expected_counter)
+            if len(excess_data) > 0:
+                for item in excess_data:
+                    logging.info(f"Not expected but received:\n{item}")
+            missed_data = list(expected_counter - actually_counter)
+            if len(missed_data) > 0:
+                for item in missed_data:
+                    logging.info(f"Expected but not received:\n{item}")
 
         if test_failed:
-            logging.info(f"FAILED: {test['name']}")
+            logging.info(f'TEST FAILED: "{testname}"')
         else:
-            logging.info(f"FAILED: {test['name']}")
-
-
+            logging.info(f'TEST SUCCESSFUL: "{testname}"')
 
     await asyncio.sleep(600)
     await do_exit(wrh_runner, web_server_runner)

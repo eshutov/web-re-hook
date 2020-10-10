@@ -45,4 +45,17 @@
     filter1:
       - 0
 
+- name: Always and filter1 by filtering with headers
+  headers:
+    TEST_NUMBER: "4"
+    filtering_header: "1"
+  data:
+    nothing: nothing
+  received:
+    - response: without templating
+  mapping:
+    always:
+      - 0
+    filter1:
+      - 0
 

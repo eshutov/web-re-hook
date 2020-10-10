@@ -23,12 +23,11 @@ def load_yml(file):
         except:
             logging.error('load_yml: Unexpected yml error:', sys.exc_info()[0])
             return(False)
-
     return(yml)
 
 class WRHRunner():
     def __init__(self):
-        self.running = False
+        self.is_running = False
         self.proc = None
         self.stdout = ""
         self.stderr = ""
@@ -36,17 +35,18 @@ class WRHRunner():
     async def runner(self):
         if self.proc is not None:
             return(False)
-        self.proc = await asyncio.create_subprocess_shell(
-            "python3 webrehook.py --confdir testdata/integration/ --autodone False",
+        self.proc = await asyncio.create_subprocess_exec(
+            "python3", "webrehook.py", "--confdir",
+            "testdata/integration/", "--autodone", "False",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE)
-        self.running = True
+        self.is_running = True
         asyncio.create_task(self.waiter())
         return(True)
 
     async def waiter(self):
         await self.proc.wait()
-        self.running = False
+        self.is_running = False
         self.stdout, self.stderr = await self.proc.communicate()
 
     @classmethod
@@ -57,22 +57,21 @@ class WRHRunner():
         return(False)
 
     async def shutdown(self):
-        if not self.running:
-            return()
-        self.proc.kill()
-        await asyncio.sleep(2)
-
-        if not self.running:
+        if not self.is_running:
             return()
         self.proc.terminate()
+        try:
+            await asyncio.wait_for(self.proc.wait(), 2)
+        except asyncio.TimeoutError:
+            pass
 
-async def do_exit(wrh_runner=None, web_server_runner=None):
-    tasks = []
-    if wrh_runner:
-        tasks.append(asyncio.create_task(wrh_runner.shutdown()))
-    if web_server_runner:
-        tasks.append(asyncio.create_task(web_server_runner.shutdown()))
-    pass
+        if not self.is_running:
+            return()
+        self.proc.kill()
+        try:
+            await asyncio.wait_for(self.proc.wait(), 2)
+        except asyncio.TimeoutError:
+            pass
 
 class WebServerRunner():
     def __init__(self, port=8081):
@@ -135,6 +134,14 @@ class WebServerRunner():
     def reset(self):
         self.received = {}
 
+async def do_shutdown(wrh_runner=None, web_server_runner=None):
+    tasks = []
+    if wrh_runner:
+        tasks.append(asyncio.create_task(wrh_runner.shutdown()))
+    if web_server_runner:
+        tasks.append(asyncio.create_task(web_server_runner.shutdown()))
+    await asyncio.gather(*tasks)
+
 async def send_(test):
     async with ClientSession() as session:
         try:
@@ -152,47 +159,51 @@ async def send_(test):
     return(True)
 
 async def main():
-    logging.basicConfig(level=logging.INFO)
+    logging_level = int(os.environ.get("INTEGRATION_VERBOSE", 20))
+    logging.basicConfig(level=logging_level)
+    logging.root.manager.loggerDict['aiohttp.access'].propagate = False
+    logging.info("Prepairing test env")
 
     tests = load_yml('testdata/integration/testdata.yml')
     if not tests:
-        logging.error("main: testdata loading error")
-        sys.exit(1)
+        logging.error("main: Testdata loading error.")
+        return(False)
 
     for test in tests:
         for key, value in test["mapping"].items():
             if max(value) >= len(test["received"]):
                 logging.error(
-                    f"main: Test {test['name']} in {key} path out of index")
-                sys.exit(1)
+                    f"main: Test {test['name']} in {key} path out of index.")
+                return(False)
 
     wrh_runner = await WRHRunner().run()
     if wrh_runner == False:
         logging.error("main: Cannot start child process.")
-        await do_exit(wrh_runner)
-        sys.exit(1)
+        await do_shutdown(wrh_runner)
+        return(False)
 
     web_server_runner = await WebServerRunner.run()
     if web_server_runner == False:
         logging.error("main: Cannot start web server.")
-        await do_exit(wrh_runner, web_server_runner)
-        sys.exit(1)
+        await do_shutdown(wrh_runner, web_server_runner)
+        return(False)
 
 # Give child script time to run python or/and die with runtime errors
     await asyncio.sleep(1)
-    if not wrh_runner.running:
-        logging.error("Child script error")
+    if not wrh_runner.is_running:
+        logging.error("Child script error.")
         logging.error(f"stdout: {wrh_runner.stdout}")
         logging.error(f"stderr: {wrh_runner.stderr}")
-        await do_exit(wrh_runner, web_server_runner)
-        sys.exit(1)
+        await do_shutdown(wrh_runner, web_server_runner)
+        return(False)
 
 # Main test cycle
+    logging.info("Starting test\n")
+    failed_tests = []
     for test in tests:
-        print("################################")
-        test_failed = False
         testname = test['name']
-        logging.info(f"Tesing: {testname}")
+        logging.warning(f"TEST NAME: {testname}")
+        test_failed = False
         web_server_runner.reset()
         await send_(test)
 
@@ -224,27 +235,43 @@ async def main():
                 continue
 
             test_failed = True
-            logging.info(f'Path failed: "{testname}" /{path}')
+            logging.warning(f'Path failed: /{path}')
             excess_data = list(actually_counter - expected_counter)
             if len(excess_data) > 0:
                 for item in excess_data:
-                    logging.info(f"Not expected but received:\n{item}")
+                    logging.warning(f"Not expected but received:\n{item}")
             missed_data = list(expected_counter - actually_counter)
             if len(missed_data) > 0:
                 for item in missed_data:
-                    logging.info(f"Expected but not received:\n{item}")
+                    logging.warning(f"Expected but not received:\n{item}")
 
         if test_failed:
-            logging.info(f'TEST FAILED: "{testname}"')
+            logging.warning('RESULT: -----------------> FAILED\n')
+            failed_tests.append(testname)
         else:
-            logging.info(f'TEST SUCCESSFUL: "{testname}"')
+            logging.warning('RESULT: -----------------> SUCCESSFUL\n')
 
-    await asyncio.sleep(600)
-    await do_exit(wrh_runner, web_server_runner)
+    await do_shutdown(wrh_runner, web_server_runner)
+
+    if failed_tests:
+        logging.error('---------------------------------------------')
+        logging.error('\t!!! INTEGRATION TEST: FAILED !!!')
+        logging.error('---------------------------------------------')
+        logging.error('Failed tests:')
+        for test in failed_tests:
+            logging.error(f'{test}')
+        return(False)
+    else:
+        logging.error('---------------------------------------------')
+        logging.error('\t\tINTEGRATION TEST: PASSED')
+        logging.error('---------------------------------------------')
+        return(True)
 
 if __name__ == '__main__':
     try:
-        asyncio.run(main())
+        result = asyncio.run(main())
     except KeyboardInterrupt:
         pass
+
+    sys.exit(int(not result == True))
 

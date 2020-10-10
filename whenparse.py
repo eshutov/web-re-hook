@@ -46,7 +46,7 @@ class WhenLexer(Lexer):
 class WhenParser(Parser):
 #   debugfile = 'parser.out'
     tokens = WhenLexer.tokens
-# precedance does not make sence here: since we do not do calcultaions,
+# precedance does not make sence here: since we do not do calculations,
 # but just checking syntax, it is here to rm shift/reduce error only
     precedence = (
        ('left', NAME, STRING, JSON, NUMBER, BINOP, BINOPEXC, NOT, IN, RESWORD),

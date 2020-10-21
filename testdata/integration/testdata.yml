@@ -45,7 +45,7 @@
     filter1:
       - 0
 
-- name: Always and filter1 by filtering with headers
+- name: Always and filter2 by filtering with headers
   headers:
     TEST_NUMBER: "4"
     filtering_header: "1"
@@ -56,6 +56,60 @@
   mapping:
     always:
       - 0
-    filter1:
+    filter2:
+      - 0
+
+- name: Always and filter2 by filtering with headers
+  headers:
+    TEST_NUMBER: "5"
+  data:
+    always: True
+    filter1: False
+    filter2: True
+    filter3: False
+    never: False
+  received:
+    - response: without templating
+  mapping:
+    always:
+      - 0
+    filter2:
+      - 0
+
+- name: Templating 1
+  headers:
+    TEST_NUMBER: "6"
+  data:
+    str1: string1
+    str2: string2
+    str3: string3
+    int1: 1
+    int2: 2
+    int3: 3
+    list:
+      - str1
+      - str2
+      - str3
+    json:
+      list:
+        - 111
+        - string
+        - - aaa
+          - bbb
+          - ccc
+      nested:
+        nested_item: item
+  received:
+    - str2: string2
+      int2: 2
+      list: str1_str2_str3
+      json_list2: string
+      json_nested: item
+      combined:
+        aaa: str3
+        bbb: str2
+        ccc: str1
+  mapping:
+    always:
       - 0
 

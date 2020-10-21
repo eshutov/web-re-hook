@@ -235,7 +235,7 @@ async def main():
                 continue
 
             test_failed = True
-            logging.warning(f'Path failed: /{path}')
+            logging.warning(f'Path failed: {path}')
             excess_data = list(actually_counter - expected_counter)
             if len(excess_data) > 0:
                 for item in excess_data:
@@ -256,10 +256,15 @@ async def main():
     if failed_tests:
         logging.error('---------------------------------------------')
         logging.error('\t!!! INTEGRATION TEST: FAILED !!!')
+        logging.error('---------------------------------------------\n')
+        logging.error('\t\tFAILED TESTS:')
+        while failed_tests:
+            test = failed_tests.pop(0)
+            postfix_ = "" if failed_tests else "\n"
+            logging.error(f'\t{test}{postfix_}')
         logging.error('---------------------------------------------')
-        logging.error('Failed tests:')
-        for test in failed_tests:
-            logging.error(f'{test}')
+        logging.error('\t!!! INTEGRATION TEST: FAILED !!!')
+        logging.error('---------------------------------------------')
         return(False)
     else:
         logging.error('---------------------------------------------')

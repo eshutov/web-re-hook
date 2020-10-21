@@ -1,0 +1,12 @@
+{
+  "str2": "{{ JSON['str2'] }}",
+  "int2": {{ JSON['int2'] }},
+  "list": "{{ '_'.join(JSON['list']) }}",
+  "json_list2": "{{ JSON['json']['list'][1] }}",
+  "json_nested": "{{ JSON['json']['nested']['nested_item'] }}",
+  "combined": {
+{% for index in range(3) %}
+  "{{ JSON['json']['list'][2][index] }}": "{{ JSON['list'][ -index - 1] }}"{{ ',' if loop.index < 3 }}
+{% endfor %}
+  }
+}

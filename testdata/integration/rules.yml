@@ -86,7 +86,7 @@
     - never
 
 ### 4
-- name: Always and filter1 by filtering with headers, rule 1
+- name: Always and filter2 by filtering with headers, rule 1
   headers:
     TEST_NUMBER: "4"
     filtering_header: "1"
@@ -95,25 +95,25 @@
   routes:
     - always
 
-- name: Always and filter1 by filtering with headers, rule 1
-  headers:
-    TEST_NUMBER: "4"
-    filtering_header: "1"
-  when: True
-  template: without_template.j2
-  routes:
-    - filter1
-
-- name: Always and filter1 by filtering with headers, rule 1
+- name: Always and filter2 by filtering with headers, rule 2
   headers:
     TEST_NUMBER: "4"
     filtering_header: "2"
   when: True
   template: without_template.j2
   routes:
+    - filter1
+
+- name: Always and filter2 by filtering with headers, rule 3
+  headers:
+    TEST_NUMBER: "4"
+    filtering_header: "1"
+  when: True
+  template: without_template.j2
+  routes:
     - filter2
 
-- name: Always and filter1 by filtering with headers, rule 1
+- name: Always and filter2 by filtering with headers, rule 4
   headers:
     TEST_NUMBER: "4"
     filtering_header: "3"
@@ -122,7 +122,7 @@
   routes:
     - filter3
 
-- name: Always and filter1 by filtering with headers, rule 1
+- name: Always and filter2 by filtering with headers, rule 5
   headers:
     TEST_NUMBER: "4"
     filtering_header: "4"
@@ -130,4 +130,54 @@
   template: without_template.j2
   routes:
     - never
+
+### 5
+- name: Always and filter2 by filtering with when, rule 1
+  headers:
+    TEST_NUMBER: "5"
+  when: JSON['always'] == True
+  template: without_template.j2
+  routes:
+    - always
+
+- name: Always and filter2 by filtering with when, rule 2
+  headers:
+    TEST_NUMBER: "5"
+  when: JSON['filter1'] == True
+  template: without_template.j2
+  routes:
+    - filter1
+
+- name: Always and filter2 by filtering with when, rule 3
+  headers:
+    TEST_NUMBER: "5"
+  when: JSON['filter2'] == True
+  template: without_template.j2
+  routes:
+    - filter2
+
+- name: Always and filter2 by filtering with when, rule 4
+  headers:
+    TEST_NUMBER: "5"
+  when: JSON['filter3'] == True
+  template: without_template.j2
+  routes:
+    - filter3
+
+- name: Always and filter2 by filtering with when, rule 5
+  headers:
+    TEST_NUMBER: "5"
+  when: JSON['never'] == True
+  template: without_template.j2
+  routes:
+    - never
+
+### 6
+- name: Templating 1
+  headers:
+    TEST_NUMBER: "6"
+  when: True
+  template: template1.j2
+  routes:
+    - always
 
